@@ -4,7 +4,7 @@ import subprocess
 import pytest
 from time import sleep
 
-from yaml import full_load
+import yaml
 from pymilvus import connections, utility
 from chaos.checker import (CreateChecker,
                            InsertChecker,
@@ -115,17 +115,42 @@ class TestOperations(TestBase):
         for i in range(10):
             sleep(request_duration // 10)
             if i == 3:
-                # apply rolling update after 30% time of request_duration
-                log.info("*********************Apply Rolling Update**********************")
-                file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
-                cmd = f"kubectl apply -f {file_path}"
-                log.info(f"cmd: {cmd}")
-                res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                stdout, stderr = res.communicate()
-                log.info(f"{cmd}, stdout: {stdout}, stderr: {stderr}")
                 # reset all
                 for k, v in self.health_checkers.items():
                     v.reset()
+                # apply rolling update after 30% time of request_duration
+                log.info("*********************Apply Rolling Update**********************")
+                file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
+                with open(file_path, "r") as f:
+                        config = yaml.load(f, Loader=yaml.FullLoader)
+                target_image = config["components"]["image"]
+                meta_name = config["metadata"]["name"]
+                del config["components"]["image"]
+                components = ["indexNode", "rootCoord", ["dataCoord", "indexCoord"], "queryCoord", "dataNode", "queryNode", "proxy"]
+                for component in components:
+                    # load config and modify
+                    with open(file_path, "r") as f:
+                        config = yaml.load(f, Loader=yaml.FullLoader)
+                    if isinstance(component, list):
+                        for c in component:
+                            config["components"][c]["image"] = target_image
+                    else:
+                        config["components"][component]["image"] = target_image
+                    log.info(f"config: {config}")
+                    # save config to file
+                    with open(file_path, "w") as f:
+                        yaml.dump(config, f)
+                    
+                    cmd = f"kubectl patch -f {file_path}"
+                    log.info(f"cmd: {cmd}")
+                    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    stdout, stderr = res.communicate()
+                    log.info(f"{cmd}, stdout: {stdout}, stderr: {stderr}")
+                    # wait for pods ready
+                    label_selector = f"app.kubernetes.io/instance={meta_name}"
+                    is_ready = wait_pods_ready("chaos-testing", label_selector)
+                    pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
+
             for k, v in self.health_checkers.items():
                 v.check_result()
         for k, v in self.health_checkers.items():
@@ -153,10 +178,6 @@ class TestOperations(TestBase):
         for k, v in self.health_checkers.items():
             v.reset()
         # wait all pod running
-        file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
-        with open(file_path, "r") as f:
-            config = full_load(f)
-        meta_name = config["metadata"]["name"]
         label_selector = f"app.kubernetes.io/instance={meta_name}"
         is_ready = wait_pods_ready("chaos-testing", label_selector)
         pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
