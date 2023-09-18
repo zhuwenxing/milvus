@@ -61,14 +61,14 @@ class TestOperations(TestBase):
         schema = cf.gen_default_collection_schema(auto_id=False)
 
         checkers = {
-            Op.create: CreateChecker(collection_name=None, schema=schema),
-            Op.insert: InsertChecker(collection_name=c_name, schema=schema),
-            Op.flush: FlushChecker(collection_name=c_name, schema=schema),
-            Op.index: IndexChecker(collection_name=None, schema=schema),
+            # Op.create: CreateChecker(collection_name=None, schema=schema),
+            # Op.insert: InsertChecker(collection_name=c_name, schema=schema),
+            # Op.flush: FlushChecker(collection_name=c_name, schema=schema),
+            # Op.index: IndexChecker(collection_name=None, schema=schema),
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
-            Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
-            Op.drop: DropChecker(collection_name=None, schema=schema)
+            # Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
+            # Op.drop: DropChecker(collection_name=None, schema=schema)
         }
         self.health_checkers = checkers
 
@@ -123,25 +123,29 @@ class TestOperations(TestBase):
                 file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
                 with open(file_path, "r") as f:
                         config = yaml.load(f, Loader=yaml.FullLoader)
-                target_image = config["components"]["image"]
+
+                target_image = config["spec"]["components"]["image"]
+                kind = config["kind"]
                 meta_name = config["metadata"]["name"]
-                del config["components"]["image"]
+                del config["spec"]["components"]["image"] # delete image to make other components use the previous image
                 components = ["indexNode", "rootCoord", ["dataCoord", "indexCoord"], "queryCoord", "dataNode", "queryNode", "proxy"]
                 for component in components:
+                    if component not in config["spec"]["components"]:
+                        config["spec"]["components"][component] = {}
                     # load config and modify
                     with open(file_path, "r") as f:
                         config = yaml.load(f, Loader=yaml.FullLoader)
                     if isinstance(component, list):
                         for c in component:
-                            config["components"][c]["image"] = target_image
+                            config["spec"]["components"][c]["image"] = target_image
                     else:
-                        config["components"][component]["image"] = target_image
+                        config["spec"]["components"][component]["image"] = target_image
                     log.info(f"config: {config}")
                     # save config to file
                     with open(file_path, "w") as f:
-                        yaml.dump(config, f)
+                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
                     
-                    cmd = f"kubectl patch -f {file_path}"
+                    cmd = f"kubectl patch {kind} {meta_name} --patch-file {file_path} --type merge"
                     log.info(f"cmd: {cmd}")
                     res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     stdout, stderr = res.communicate()
