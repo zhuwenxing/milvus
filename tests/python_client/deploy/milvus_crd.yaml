@@ -31,6 +31,16 @@ spec:
     imageUpdateMode: rollingUpgrade
     image: milvusdb/milvus:2.2.0-20230208-2e4d64ec
     disableMetric: false
+    rootCoord:
+      replicas: 1
+    dataCoord:
+      replicas: 1
+    indexCoord:
+      replicas: 1
+    queryCoord:
+      replicas: 1
+    proxy:
+      replicas: 1
     dataNode:
       replicas: 3
     indexNode:
