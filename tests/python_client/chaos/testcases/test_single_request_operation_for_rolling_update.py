@@ -1,4 +1,4 @@
-import time
+from pprint import pformat
 from pathlib import Path
 import subprocess
 import pytest
@@ -140,7 +140,7 @@ class TestOperations(TestBase):
                             config["spec"]["components"][c]["image"] = target_image
                     else:
                         config["spec"]["components"][component]["image"] = target_image
-                    log.info(f"config: {config}")
+                    log.info(f"config: {pformat(config)}")
                     # save config to file
                     with open(file_path, "w") as f:
                         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
