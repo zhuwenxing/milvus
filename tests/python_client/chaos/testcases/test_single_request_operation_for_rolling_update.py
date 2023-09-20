@@ -167,7 +167,8 @@ class TestOperations(TestBase):
                     stdout, stderr = res.communicate()
                     output = stdout.decode("utf-8")
                     log.info(f"{cmd}\n{output}\n")                    
-
+                    for k, v in self.health_checkers.items():
+                        v.check_result()
             for k, v in self.health_checkers.items():
                 v.check_result()
         for k, v in self.health_checkers.items():
