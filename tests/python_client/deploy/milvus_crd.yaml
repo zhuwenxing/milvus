@@ -7,7 +7,7 @@ metadata:
   labels:
     app: milvus
 spec:
-  mode: standalone
+  mode: cluster
   config:
     dataNode:
       memory:
