@@ -127,7 +127,7 @@ class TestOperations(TestBase):
                 
                 target_image = config["spec"]["components"]["image"]
                 del config["spec"]["components"]["image"]
-                log.info(f"config: {pformat(config)}")
+                log.info(f"config: {pformat(config['spec']['components'])}")
                 # save config to file
                 with open(file_path, "w") as f:
                     yaml.dump(config, f, default_flow_style=False, sort_keys=False)
@@ -144,7 +144,7 @@ class TestOperations(TestBase):
                             config["spec"]["components"][c]["image"] = target_image
                     else:
                         config["spec"]["components"][component]["image"] = target_image
-                    log.info(f"config: {pformat(config)}")
+                    log.info(f"config: {pformat(config['spec']['components'])}")
                     # save config to file
                     with open(file_path, "w") as f:
                         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
