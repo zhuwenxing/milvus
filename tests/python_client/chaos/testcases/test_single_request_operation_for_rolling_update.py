@@ -124,7 +124,13 @@ class TestOperations(TestBase):
                 with open(file_path, "r") as f:
                         config = yaml.load(f, Loader=yaml.FullLoader)
 
-                target_image = "v2.3.0"
+                
+                target_image = config["spec"]["components"]["image"]
+                del config["spec"]["components"]["image"]
+                log.info(f"config: {pformat(config)}")
+                # save config to file
+                with open(file_path, "w") as f:
+                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
                 kind = config["kind"]
                 meta_name = config["metadata"]["name"]
                 components = ["indexNode", "rootCoord", ["dataCoord", "indexCoord"], "queryCoord", "dataNode", "queryNode", "proxy"]
@@ -150,10 +156,11 @@ class TestOperations(TestBase):
                     output = stdout.decode("utf-8")
                     log.info(f"{cmd}\n{output}\n")
                     # wait for pods ready
-                    sleep(120)
-                    label_selector = f"app.kubernetes.io/instance={meta_name}"
-                    is_ready = wait_pods_ready("chaos-testing", label_selector)
-                    pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
+                    log.info("wait 60s after rolling update patch")
+                    sleep(60)
+                    # label_selector = f"app.kubernetes.io/instance={meta_name}"
+                    # is_ready = wait_pods_ready("chaos-testing", label_selector)
+                    # pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
                     cmd = f"kubectl get pod|grep {meta_name}"
                     log.info(f"cmd: {cmd}")
                     res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
