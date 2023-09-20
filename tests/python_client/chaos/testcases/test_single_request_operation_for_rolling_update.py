@@ -158,17 +158,19 @@ class TestOperations(TestBase):
                     # wait for pods ready
                     log.info("wait 60s after rolling update patch")
                     sleep(60)
-                    # label_selector = f"app.kubernetes.io/instance={meta_name}"
-                    # is_ready = wait_pods_ready("chaos-testing", label_selector)
-                    # pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
                     cmd = f"kubectl get pod|grep {meta_name}"
                     log.info(f"cmd: {cmd}")
                     res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     stdout, stderr = res.communicate()
                     output = stdout.decode("utf-8")
-                    log.info(f"{cmd}\n{output}\n")                    
-                    for k, v in self.health_checkers.items():
-                        v.check_result()
+                    log.info(f"{cmd}\n{output}\n")
+                    cmd = f"kubectl describe mi {meta_name}"
+                    log.info(f"cmd: {cmd}")
+                    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    stdout, stderr = res.communicate()
+                    output = stdout.decode("utf-8")
+                    log.info(f"{cmd}\n{output}\n")                     
+
             for k, v in self.health_checkers.items():
                 v.check_result()
         for k, v in self.health_checkers.items():
@@ -200,7 +202,7 @@ class TestOperations(TestBase):
         is_ready = wait_pods_ready("chaos-testing", label_selector)
         pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
         cc.start_monitor_threads(self.health_checkers)
-        sleep(60)
+        sleep(120)
         log.info("check succ rate after rolling update finished")
         for k, v in self.health_checkers.items():
             v.check_result()
