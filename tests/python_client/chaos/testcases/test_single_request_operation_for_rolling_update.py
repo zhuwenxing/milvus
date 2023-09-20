@@ -124,14 +124,12 @@ class TestOperations(TestBase):
                 with open(file_path, "r") as f:
                         config = yaml.load(f, Loader=yaml.FullLoader)
 
-                target_image = config["spec"]["components"]["image"]
+                target_image = "v2.3.0"
                 kind = config["kind"]
                 meta_name = config["metadata"]["name"]
-                del config["spec"]["components"]["image"] # delete image to make other components use the previous image
                 components = ["indexNode", "rootCoord", ["dataCoord", "indexCoord"], "queryCoord", "dataNode", "queryNode", "proxy"]
+                
                 for component in components:
-                    if component not in config["spec"]["components"]:
-                        config["spec"]["components"][component] = {}
                     # load config and modify
                     with open(file_path, "r") as f:
                         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -149,11 +147,19 @@ class TestOperations(TestBase):
                     log.info(f"cmd: {cmd}")
                     res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     stdout, stderr = res.communicate()
-                    log.info(f"{cmd}, stdout: {stdout}, stderr: {stderr}")
+                    output = stdout.decode("utf-8")
+                    log.info(f"{cmd}\n{output}\n")
                     # wait for pods ready
+                    sleep(120)
                     label_selector = f"app.kubernetes.io/instance={meta_name}"
                     is_ready = wait_pods_ready("chaos-testing", label_selector)
                     pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
+                    cmd = f"kubectl get pod|grep {meta_name}"
+                    log.info(f"cmd: {cmd}")
+                    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    stdout, stderr = res.communicate()
+                    output = stdout.decode("utf-8")
+                    log.info(f"{cmd}\n{output}\n")                    
 
             for k, v in self.health_checkers.items():
                 v.check_result()

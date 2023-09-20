@@ -2,7 +2,7 @@
 apiVersion: milvus.io/v1beta1
 kind: Milvus
 metadata:
-  name: operator-demo
+  name: rolling-update-test
   namespace: chaos-testing
   labels:
     app: milvus
@@ -29,7 +29,7 @@ spec:
   components:
     enableRollingUpdate: true
     imageUpdateMode: rollingUpgrade
-    image: milvusdb/milvus:2.2.0-20230208-2e4d64ec
+    image: milvusdb/milvus:v2.2.14
     disableMetric: false
     rootCoord:
       replicas: 1
