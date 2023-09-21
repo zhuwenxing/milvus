@@ -42,5 +42,9 @@ def new_image_repo(request):
 def new_image_tag(request):
     return request.config.getoption("--new_image_tag")
 
+@pytest.fixture
+def components_order(request):
+    return request.config.getoption("--components_order")
+
 # add a fixture for all index?
 
