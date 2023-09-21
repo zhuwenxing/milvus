@@ -39,7 +39,7 @@ def run_cmd(cmd):
 class TestOperations(TestBase):
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, new_image_repo, new_image_tag):
+    def test_operations(self, new_image_repo, new_image_tag, components_order):
         log.info("*********************Rolling Update Start**********************")
         origin_file_path = f"{str(Path(__file__).parent)}/milvus_crd.yaml"
         with open(origin_file_path, "r") as f:
@@ -55,7 +55,7 @@ class TestOperations(TestBase):
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
         kind = config["kind"]
         meta_name = config["metadata"]["name"]
-        components = ["indexNode", "rootCoord", "dataCoord", "indexCoord", "queryCoord", "dataNode", "queryNode", "proxy"]
+        components = eval(components_order) # default is ['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'dataNode', 'queryNode', 'proxy']
         
         for component in components:
             prefix = f"[update image for {component}]"
@@ -93,5 +93,5 @@ class TestOperations(TestBase):
                 else:
                     log.info(prefix + "wait 10s for milvus ready")
                     sleep(10)
-            sleep(30)
+            sleep(60)
         log.info("*********************Test Completed**********************")

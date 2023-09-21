@@ -24,6 +24,7 @@ def pytest_addoption(parser):
     parser.addoption('--release_name', type=str, action='store', default="deploy-test", help="release name for deploy test")
     parser.addoption('--new_image_repo', type=str, action='store', default="harbor.milvus.io/dockerhub/milvusdb/milvus", help="image repo")
     parser.addoption('--new_image_tag', type=str, action='store', default="v2.3.0", help="image tag")
+    parser.addoption('--components_order', type=str, action='store', default="['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'dataNode', 'queryNode', 'proxy']", help="components update order")
 
 @pytest.fixture
 def data_size(request):
