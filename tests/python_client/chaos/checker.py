@@ -18,7 +18,7 @@ from common import common_func as cf
 from common import common_type as ct
 from common.milvus_sys import MilvusSys
 from chaos import constants
-
+from pymilvus import Collection
 from common.common_type import CheckTasks
 from utils.util_log import test_log as log
 from utils.api_request import Error
@@ -817,18 +817,20 @@ class DropChecker(Checker):
         self.collection_pool = []
         self.gen_collection_pool(schema=self.schema)
 
-    def gen_collection_pool(self, pool_size=50, schema=None):
+    def gen_collection_pool(self, pool_size=300, schema=None):
         for i in range(pool_size):
             collection_name = cf.gen_unique_str("DropChecker_")
             res, result = self.c_wrap.init_collection(name=collection_name, schema=schema)
             if result:
-                self.collection_pool.append(collection_name)
+                c = Collection(name=collection_name)
+                self.collection_pool.append(c)
 
     @trace()
     def drop(self):
-        res, result = self.c_wrap.drop()
+        c = self.collection_pool[-1]
+        res, result = c.drop()
         if result:
-            self.collection_pool.remove(self.c_wrap.name)
+            self.collection_pool.pop()
         return res, result
 
     @exception_handler()
@@ -845,12 +847,7 @@ class DropChecker(Checker):
                         self.gen_collection_pool(schema=self.schema)
                 except Exception as e:
                     log.error(f"Failed to generate collection pool: {e}")
-                try:
-                    c_name = self.collection_pool[0]
-                    self.c_wrap.init_collection(name=c_name)
-                except Exception as e:
-                    log.error(f"Failed to init new collection: {e}")
-            sleep(constants.WAIT_PER_OP / 10)
+            sleep(constants.WAIT_PER_OP / 20)
 
 
 class LoadBalanceChecker(Checker):
