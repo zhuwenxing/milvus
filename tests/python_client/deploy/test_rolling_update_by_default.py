@@ -37,12 +37,12 @@ def run_cmd(cmd):
 class TestOperations(TestBase):
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self):
+    def test_operations(self, new_image_repo, new_image_tag):
         log.info("*********************Rolling Update Start**********************")
         origin_file_path = f"{str(Path(__file__).parent)}/milvus_crd.yaml"
         with open(origin_file_path, "r") as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
-        target_image = "harbor.milvus.io/dockerhub/milvusdb/milvus:v2.2.14"
+        target_image = f"{new_image_repo}:{new_image_tag}"
         config["spec"]["components"]["image"] = target_image
         config["spec"]["components"]["imageUpdateMode"] = "rollingUpgrade"
         log.info(f"config: {pformat(config['spec']['components'])}")
