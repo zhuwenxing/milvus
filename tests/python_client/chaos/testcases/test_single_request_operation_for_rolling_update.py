@@ -61,14 +61,14 @@ class TestOperations(TestBase):
         schema = cf.gen_default_collection_schema(auto_id=False)
 
         checkers = {
-            # Op.create: CreateChecker(collection_name=None, schema=schema),
-            # Op.insert: InsertChecker(collection_name=c_name, schema=schema),
-            # Op.flush: FlushChecker(collection_name=c_name, schema=schema),
-            # Op.index: IndexChecker(collection_name=None, schema=schema),
+            Op.create: CreateChecker(collection_name=None, schema=schema),
+            Op.insert: InsertChecker(collection_name=c_name, schema=schema),
+            Op.flush: FlushChecker(collection_name=c_name, schema=schema),
+            Op.index: IndexChecker(collection_name=None, schema=schema),
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
-            # Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
-            # Op.drop: DropChecker(collection_name=None, schema=schema)
+            Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
+            Op.drop: DropChecker(collection_name=None, schema=schema)
         }
         self.health_checkers = checkers
 
@@ -106,7 +106,7 @@ class TestOperations(TestBase):
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
-
+        
         # wait request_duration
         request_duration = request_duration.replace("h", "*3600+").replace("m", "*60+").replace("s", "")
         if request_duration[-1] == "+":
@@ -114,63 +114,6 @@ class TestOperations(TestBase):
         request_duration = eval(request_duration)
         for i in range(10):
             sleep(request_duration // 10)
-            if i == 3:
-                # reset all
-                for k, v in self.health_checkers.items():
-                    v.reset()
-                # apply rolling update after 30% time of request_duration
-                log.info("*********************Apply Rolling Update**********************")
-                file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
-                with open(file_path, "r") as f:
-                        config = yaml.load(f, Loader=yaml.FullLoader)
-
-                
-                target_image = config["spec"]["components"]["image"]
-                del config["spec"]["components"]["image"]
-                log.info(f"config: {pformat(config['spec']['components'])}")
-                # save config to file
-                with open(file_path, "w") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-                kind = config["kind"]
-                meta_name = config["metadata"]["name"]
-                components = ["indexNode", "rootCoord", ["dataCoord", "indexCoord"], "queryCoord", "dataNode", "queryNode", "proxy"]
-                
-                for component in components:
-                    # load config and modify
-                    with open(file_path, "r") as f:
-                        config = yaml.load(f, Loader=yaml.FullLoader)
-                    if isinstance(component, list):
-                        for c in component:
-                            config["spec"]["components"][c]["image"] = target_image
-                    else:
-                        config["spec"]["components"][component]["image"] = target_image
-                    log.info(f"config: {pformat(config['spec']['components'])}")
-                    # save config to file
-                    with open(file_path, "w") as f:
-                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-                    
-                    cmd = f"kubectl patch {kind} {meta_name} --patch-file {file_path} --type merge"
-                    log.info(f"cmd: {cmd}")
-                    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    stdout, stderr = res.communicate()
-                    output = stdout.decode("utf-8")
-                    log.info(f"{cmd}\n{output}\n")
-                    # wait for pods ready
-                    log.info("wait 60s after rolling update patch")
-                    sleep(60)
-                    cmd = f"kubectl get pod|grep {meta_name}"
-                    log.info(f"cmd: {cmd}")
-                    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    stdout, stderr = res.communicate()
-                    output = stdout.decode("utf-8")
-                    log.info(f"{cmd}\n{output}\n")
-                    cmd = f"kubectl describe mi {meta_name}"
-                    log.info(f"cmd: {cmd}")
-                    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    stdout, stderr = res.communicate()
-                    output = stdout.decode("utf-8")
-                    log.info(f"{cmd}\n{output}\n")                     
-
             for k, v in self.health_checkers.items():
                 v.check_result()
         for k, v in self.health_checkers.items():
