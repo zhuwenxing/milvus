@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import pytest
 from time import sleep
-
+from yaml import full_load
 import yaml
 from pymilvus import connections, utility
 from chaos.checker import (CreateChecker,
@@ -140,7 +140,12 @@ class TestOperations(TestBase):
         #
         for k, v in self.health_checkers.items():
             v.reset()
+
         # wait all pod running
+        file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
+        with open(file_path, "r") as f:
+            config = full_load(f)
+        meta_name = config["metadata"]["name"]        
         label_selector = f"app.kubernetes.io/instance={meta_name}"
         is_ready = wait_pods_ready("chaos-testing", label_selector)
         pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
