@@ -93,4 +93,5 @@ class TestOperations(TestBase):
                 else:
                     log.info(prefix + "wait 10s for milvus ready")
                     sleep(10)
+            sleep(30)
         log.info("*********************Test Completed**********************")
