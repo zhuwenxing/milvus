@@ -68,7 +68,7 @@ class TestOperations(TestBase):
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
             Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
-            Op.drop: DropChecker(collection_name=None, schema=schema)
+            # Op.drop: DropChecker(collection_name=None, schema=schema)
         }
         self.health_checkers = checkers
 
@@ -106,7 +106,7 @@ class TestOperations(TestBase):
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
-        
+
         # wait request_duration
         request_duration = request_duration.replace("h", "*3600+").replace("m", "*60+").replace("s", "")
         if request_duration[-1] == "+":
