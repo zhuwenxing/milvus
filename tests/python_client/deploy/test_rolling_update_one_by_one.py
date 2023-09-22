@@ -56,7 +56,7 @@ class TestOperations(TestBase):
         kind = config["kind"]
         meta_name = config["metadata"]["name"]
         components = eval(components_order) # default is ['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'dataNode', 'queryNode', 'proxy']
-        
+        log.info(f"update order: {components}")
         for component in components:
             prefix = f"[update image for {component}]"
             # load config and update
