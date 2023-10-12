@@ -1,10 +1,8 @@
-from pprint import pformat
 from pathlib import Path
-import subprocess
+import time
 import pytest
 from time import sleep
 from yaml import full_load
-import yaml
 from pymilvus import connections, utility
 from chaos.checker import (CreateChecker,
                            InsertChecker,
@@ -13,7 +11,6 @@ from chaos.checker import (CreateChecker,
                            QueryChecker,
                            IndexChecker,
                            DeleteChecker,
-                           DropChecker,
                            Op)
 from utils.util_k8s import wait_pods_ready
 from utils.util_log import test_log as log
@@ -22,7 +19,6 @@ from common.common_type import CaseLabel
 from common import common_func as cf
 from chaos.chaos_commons import assert_statistic
 from chaos import constants
-from delayed_assert import assert_expectations
 
 
 class TestBase:
@@ -68,41 +64,41 @@ class TestOperations(TestBase):
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
             Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
-            # Op.drop: DropChecker(collection_name=None, schema=schema)
         }
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check):
+    def test_operations(self, request_duration, is_check, prepare_data):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
         c_name = None
         self.init_health_checkers(collection_name=c_name)
-        # # prepare data by bulk insert
-        # log.info("*********************Prepare Data by bulk insert**********************")
-        # for k, v in self.health_checkers.items():
-        #     if k in [Op.search, Op.query]:
-        #         log.info(f"prepare bulk insert data for {k}")
-        #         v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
-        #         completed = False
-        #         retry_times = 0
-        #         while not completed and retry_times < 3:
-        #             completed, result = v.do_bulk_insert()
-        #             if not completed:
-        #                 log.info(f"do bulk insert failed: {result}")
-        #                 retry_times += 1
-        #                 sleep(5)
-        #         # wait for index building complete
-        #         utility.wait_for_index_building_complete(v.c_name, timeout=120)
-        #         res = utility.index_building_progress(v.c_name)
-        #         index_completed = res["pending_index_rows"] == 0
-        #         while not index_completed:
-        #             time.sleep(10)
-        #             res = utility.index_building_progress(v.c_name)
-        #             log.info(f"index building progress: {res}")
-        #             index_completed = res["pending_index_rows"] == 0
-        #         log.info(f"index building progress: {res}")
+        # prepare data by bulk insert
+        if prepare_data:
+            log.info("*********************Prepare Data by bulk insert**********************")
+            for k, v in self.health_checkers.items():
+                if k in [Op.search, Op.query]:
+                    log.info(f"prepare bulk insert data for {k}")
+                    v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
+                    completed = False
+                    retry_times = 0
+                    while not completed and retry_times < 3:
+                        completed, result = v.do_bulk_insert()
+                        if not completed:
+                            log.info(f"do bulk insert failed: {result}")
+                            retry_times += 1
+                            sleep(5)
+                    # wait for index building complete
+                    utility.wait_for_index_building_complete(v.c_name, timeout=120)
+                    res = utility.index_building_progress(v.c_name)
+                    index_completed = res["pending_index_rows"] == 0
+                    while not index_completed:
+                        time.sleep(10)
+                        res = utility.index_building_progress(v.c_name)
+                        log.info(f"index building progress: {res}")
+                        index_completed = res["pending_index_rows"] == 0
+                    log.info(f"index building progress: {res}")
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
@@ -120,9 +116,9 @@ class TestOperations(TestBase):
             v.pause()
         for k, v in self.health_checkers.items():
             v.check_result()
-        for k, v in self.health_checkers.items():  
+        for k, v in self.health_checkers.items():
             log.info(f"{k} failed request: {v.fail_records}")
-        for k, v in self.health_checkers.items():  
+        for k, v in self.health_checkers.items():
             log.info(f"{k} rto: {v.get_rto()}")
         if is_check:
             assert_statistic(self.health_checkers, succ_rate_threshold=0.98)
@@ -145,7 +141,7 @@ class TestOperations(TestBase):
         file_path = f"{str(Path(__file__).parent.parent.parent)}/deploy/milvus_crd.yaml"
         with open(file_path, "r") as f:
             config = full_load(f)
-        meta_name = config["metadata"]["name"]        
+        meta_name = config["metadata"]["name"]
         label_selector = f"app.kubernetes.io/instance={meta_name}"
         is_ready = wait_pods_ready("chaos-testing", label_selector)
         pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")

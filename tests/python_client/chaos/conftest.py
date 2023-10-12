@@ -13,7 +13,7 @@ def pytest_addoption(parser):
     parser.addoption("--request_duration", action="store", default="10m", help="request_duration")
     parser.addoption("--is_check", action="store", type=bool, default=False, help="is_check")
     parser.addoption("--wait_signal", action="store", type=bool, default=True, help="wait_signal")
-
+    parser.addoption("--prepare_data", action="store", type=bool, default=False, help="prepare_data")
 
 @pytest.fixture
 def chaos_type(request):
