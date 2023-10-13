@@ -68,3 +68,8 @@ def is_check(request):
 @pytest.fixture
 def wait_signal(request):
     return request.config.getoption("--wait_signal")
+
+
+@pytest.fixture
+def prepare_data(request):
+    return request.config.getoption("--prepare_data")
