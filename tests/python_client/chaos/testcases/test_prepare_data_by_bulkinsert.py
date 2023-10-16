@@ -57,37 +57,36 @@ class TestOperations(TestBase):
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check, prepare_data):
+    def test_operations(self, request_duration):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
         c_name = None
         self.init_health_checkers(collection_name=c_name)
         # prepare data by bulk insert
-        if prepare_data:
-            log.info("*********************Prepare Data by bulk insert**********************")
-            for k, v in self.health_checkers.items():
-                if k in [Op.search, Op.query]:
-                    log.info(f"prepare bulk insert data for {k}")
-                    v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
-                    completed = False
-                    retry_times = 0
-                    while not completed and retry_times < 3:
-                        completed, result = v.do_bulk_insert()
-                        if not completed:
-                            log.info(f"do bulk insert failed: {result}")
-                            retry_times += 1
-                            sleep(5)
-                    # wait for index building complete
-                    utility.wait_for_index_building_complete(v.c_name, timeout=120)
+        log.info("*********************Prepare Data by bulk insert**********************")
+        for k, v in self.health_checkers.items():
+            if k in [Op.search, Op.query]:
+                log.info(f"prepare bulk insert data for {k}")
+                v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
+                completed = False
+                retry_times = 0
+                while not completed and retry_times < 3:
+                    completed, result = v.do_bulk_insert()
+                    if not completed:
+                        log.info(f"do bulk insert failed: {result}")
+                        retry_times += 1
+                        sleep(5)
+                # wait for index building complete
+                utility.wait_for_index_building_complete(v.c_name, timeout=120)
+                res = utility.index_building_progress(v.c_name)
+                index_completed = res["pending_index_rows"] == 0
+                while not index_completed:
+                    time.sleep(10)
                     res = utility.index_building_progress(v.c_name)
-                    index_completed = res["pending_index_rows"] == 0
-                    while not index_completed:
-                        time.sleep(10)
-                        res = utility.index_building_progress(v.c_name)
-                        log.info(f"index building progress: {res}")
-                        index_completed = res["pending_index_rows"] == 0
                     log.info(f"index building progress: {res}")
+                    index_completed = res["pending_index_rows"] == 0
+                log.info(f"index building progress: {res}")
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
@@ -109,11 +108,10 @@ class TestOperations(TestBase):
             log.info(f"{k} failed request: {v.fail_records}")
         for k, v in self.health_checkers.items():
             log.info(f"{k} rto: {v.get_rto()}")
-        if is_check:
-            assert_statistic(self.health_checkers, succ_rate_threshold=1.0)
-            # get each checker's rto
-            for k, v in self.health_checkers.items():
-                log.info(f"{k} rto: {v.get_rto()}")
-                rto = v.get_rto()
-                pytest.assume(rto < 30,  f"{k} rto expect 30s but get {rto}s")  # rto should be less than 30s
+        assert_statistic(self.health_checkers, succ_rate_threshold=1.0)
+        # get each checker's rto
+        for k, v in self.health_checkers.items():
+            log.info(f"{k} rto: {v.get_rto()}")
+            rto = v.get_rto()
+            pytest.assume(rto < 30,  f"{k} rto expect 30s but get {rto}s")  # rto should be less than 30s
         log.info("*********************Test Completed**********************")
