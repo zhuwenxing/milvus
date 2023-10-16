@@ -12,7 +12,7 @@ from common.common_type import CaseLabel
 from common import common_func as cf
 from chaos.chaos_commons import assert_statistic
 from chaos import constants
-
+import random
 
 class TestBase:
     expect_create = constants.SUCC
@@ -46,6 +46,7 @@ class TestOperations(TestBase):
         self.minio_endpoint = f"{minio_host}:9000"
 
     def init_health_checkers(self, collection_name=None):
+
         c_name = collection_name
         schema = cf.gen_default_collection_schema(auto_id=False)
 

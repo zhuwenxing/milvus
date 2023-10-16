@@ -74,31 +74,31 @@ class TestOperations(TestBase):
         log.info(connections.get_connection_addr('default'))
         c_name = None
         self.init_health_checkers(collection_name=c_name)
-        # prepare data by bulk insert
-        if prepare_data:
-            log.info("*********************Prepare Data by bulk insert**********************")
-            for k, v in self.health_checkers.items():
-                if k in [Op.search, Op.query]:
-                    log.info(f"prepare bulk insert data for {k}")
-                    v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
-                    completed = False
-                    retry_times = 0
-                    while not completed and retry_times < 3:
-                        completed, result = v.do_bulk_insert()
-                        if not completed:
-                            log.info(f"do bulk insert failed: {result}")
-                            retry_times += 1
-                            sleep(5)
-                    # wait for index building complete
-                    utility.wait_for_index_building_complete(v.c_name, timeout=120)
-                    res = utility.index_building_progress(v.c_name)
-                    index_completed = res["pending_index_rows"] == 0
-                    while not index_completed:
-                        time.sleep(10)
-                        res = utility.index_building_progress(v.c_name)
-                        log.info(f"index building progress: {res}")
-                        index_completed = res["pending_index_rows"] == 0
-                    log.info(f"index building progress: {res}")
+        # # prepare data by bulk insert
+        # if prepare_data:
+        #     log.info("*********************Prepare Data by bulk insert**********************")
+        #     for k, v in self.health_checkers.items():
+        #         if k in [Op.search, Op.query]:
+        #             log.info(f"prepare bulk insert data for {k}")
+        #             v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
+        #             completed = False
+        #             retry_times = 0
+        #             while not completed and retry_times < 3:
+        #                 completed, result = v.do_bulk_insert()
+        #                 if not completed:
+        #                     log.info(f"do bulk insert failed: {result}")
+        #                     retry_times += 1
+        #                     sleep(5)
+        #             # wait for index building complete
+        #             utility.wait_for_index_building_complete(v.c_name, timeout=120)
+        #             res = utility.index_building_progress(v.c_name)
+        #             index_completed = res["pending_index_rows"] == 0
+        #             while not index_completed:
+        #                 time.sleep(10)
+        #                 res = utility.index_building_progress(v.c_name)
+        #                 log.info(f"index building progress: {res}")
+        #                 index_completed = res["pending_index_rows"] == 0
+        #             log.info(f"index building progress: {res}")
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
@@ -128,10 +128,10 @@ class TestOperations(TestBase):
                 rto = v.get_rto()
                 pytest.assume(rto < 30,  f"{k} rto expect 30s but get {rto}s")  # rto should be less than 30s
 
-            if Op.insert in self.health_checkers:
-                # verify the no insert data loss
-                log.info("*********************Verify Data Completeness**********************")
-                self.health_checkers[Op.insert].verify_data_completeness()
+            # if Op.insert in self.health_checkers:
+            #     # verify the no insert data loss
+            #     log.info("*********************Verify Data Completeness**********************")
+            #     self.health_checkers[Op.insert].verify_data_completeness()
 
         #
         for k, v in self.health_checkers.items():

@@ -66,6 +66,13 @@ def gen_unique_str(str_value=None):
     return "test_" + prefix if str_value is None else str_value + "_" + prefix
 
 
+def generate_alphanumeric_string(length=8, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
+
 def gen_str_by_length(length=8, letters_only=False):
     if letters_only:
         return "".join(random.choice(string.ascii_letters) for _ in range(length))
@@ -412,7 +419,7 @@ def gen_dataframe_all_data_type(nb=ct.default_nb, dim=ct.default_dim, start=0, w
     if not random_primary_key:
         int64_values = pd.Series(data=[i for i in range(start, start + nb)])
     else:
-        int64_values = pd.Series(data=random.sample(range(start, start + nb), nb)) 
+        int64_values = pd.Series(data=random.sample(range(start, start + nb), nb))
     int32_values = pd.Series(data=[np.int32(i) for i in range(start, start + nb)], dtype="int32")
     int16_values = pd.Series(data=[np.int16(i) for i in range(start, start + nb)], dtype="int16")
     int8_values = pd.Series(data=[np.int8(i) for i in range(start, start + nb)], dtype="int8")
@@ -891,7 +898,7 @@ def gen_search_param(index_type, metric_type="L2"):
         log.error("Invalid index_type.")
         raise Exception("Invalid index_type.")
     log.debug(search_params)
-    
+
     return search_params
 
 
