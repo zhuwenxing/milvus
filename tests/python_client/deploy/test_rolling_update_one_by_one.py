@@ -4,7 +4,7 @@ import subprocess
 import pytest
 from time import sleep
 import yaml
-
+from datetime import datetime
 from utils.util_log import test_log as log
 from common.common_type import CaseLabel
 from chaos import constants
@@ -57,6 +57,7 @@ class TestOperations(TestBase):
         meta_name = config["metadata"]["name"]
         components = eval(components_order) # default is ['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'dataNode', 'queryNode', 'proxy']
         log.info(f"update order: {components}")
+        component_time_map = {}
         for component in components:
             prefix = f"[update image for {component}]"
             # load config and update
@@ -74,6 +75,7 @@ class TestOperations(TestBase):
             log.info(f"update image for component {component}")
             cmd = f"kubectl patch {kind} {meta_name} --patch-file {modified_file_path} --type merge"
             run_cmd(cmd)
+            component_time_map[str(component)] = datetime.now()
             # check pod status
             log.info(prefix + "wait 10s after rolling update patch")
             sleep(10)
@@ -94,4 +96,5 @@ class TestOperations(TestBase):
                     log.info(prefix + "wait 10s for milvus ready")
                     sleep(10)
             sleep(60)
+        log.info(f"rolling update time: {component_time_map}")
         log.info("*********************Test Completed**********************")
