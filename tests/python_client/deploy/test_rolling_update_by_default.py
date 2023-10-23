@@ -30,7 +30,7 @@ def run_cmd(cmd):
     stdout, stderr = res.communicate()
     output = stdout.decode("utf-8")
     log.info(f"{cmd}\n{output}\n")
-    return output     
+    return output
 
 
 
@@ -46,10 +46,11 @@ class TestOperations(TestBase):
         config["spec"]["components"]["image"] = target_image
         config["spec"]["components"]["imageUpdateMode"] = "rollingUpgrade"
         log.info(f"config: {pformat(config['spec']['components'])}")
-        components = ["indexNode", "rootCoord", "dataCoord", "indexCoord", "queryCoord", "dataNode", "queryNode", "proxy"]
+        components = ["indexNode", "rootCoord", "dataCoord", "indexCoord", "queryCoord", "dataNode", "queryNode", "proxy", "standalone", "mixCoord"]
         # delete image in specific component
         for c in components:
-            config["spec"]["components"][c]["image"] = ""
+            if c in config["spec"]["components"]:
+                config["spec"]["components"][c]["image"] = ""
         # save config to a modified file
         modified_file_path = f"{str(Path(__file__).parent)}/milvus_crd_modified.yaml"
         with open(modified_file_path, "w") as f:
