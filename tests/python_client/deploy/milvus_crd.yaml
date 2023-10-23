@@ -11,7 +11,7 @@ spec:
   config:
     dataNode:
       memory:
-        forceSyncEnable: false    
+        forceSyncEnable: false
     rootCoord:
       enableActiveStandby: true
     dataCoord:
@@ -20,8 +20,8 @@ spec:
       enableActiveStandby: true
     indexCoord:
       enableActiveStandby: true
-#    mixCoord:
-#      enableActiveStandby: true
+    mixCoord:
+      enableActiveStandby: false
     quotaAndLimits:
       enable: false
     log:
@@ -29,8 +29,26 @@ spec:
   components:
     enableRollingUpdate: true
     imageUpdateMode: rollingUpgrade
-    image: milvusdb/milvus:v2.2.14
+    image: milvusdb/milvus:2.2.0-20231021-1f972292
     disableMetric: false
+    mixCoord:
+      commands:
+        - milvus
+        - run
+        - mixture
+        - -rootcoord
+        - -querycoord
+        - -datacoord
+        - -indexcoord
+        - --run-with-subprocess
+      replicas: 1
+    standalone:
+      commands:
+        - milvus
+        - run
+        - standalone
+        - --run-with-subprocess
+      replicas: 1
     rootCoord:
       commands:
         - milvus
@@ -43,49 +61,49 @@ spec:
         - milvus
         - run
         - datacoord
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 1
     indexCoord:
       commands:
         - milvus
         - run
         - indexcoord
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 1
     queryCoord:
       commands:
         - milvus
         - run
         - querycoord
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 1
     proxy:
       commands:
         - milvus
         - run
         - proxy
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 1
     dataNode:
       commands:
         - milvus
         - run
         - datanode
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 3
     indexNode:
       commands:
         - milvus
         - run
         - indexnode
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 3
     queryNode:
       commands:
         - milvus
         - run
         - querynode
-        - --run-with-subprocess      
+        - --run-with-subprocess
       replicas: 3
   dependencies:
     msgStreamType: kafka
@@ -95,7 +113,7 @@ spec:
         pvcDeletion: false
         values:
           replicaCount: 3
-    kafka: 
+    kafka:
       inCluster:
         deletionPolicy: Retain
         pvcDeletion: false
@@ -108,13 +126,13 @@ spec:
               serviceMonitor:
                 enabled: true
             jmx:
-              enabled: true      
+              enabled: true
     pulsar:
       inCluster:
         deletionPolicy: Retain
         pvcDeletion: false
         values:
-          components: 
+          components:
             autorecovery: false
             functions: false
             toolset: false
@@ -208,4 +226,3 @@ spec:
         pvcDeletion: false
         values:
           mode: distributed
-  
