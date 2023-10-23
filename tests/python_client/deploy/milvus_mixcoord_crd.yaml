@@ -17,8 +17,8 @@ spec:
       enableActiveStandby: true
     indexCoord:
       enableActiveStandby: true
-#    mixCoord:
-#      enableActiveStandby: true
+    mixCoord:
+      enableActiveStandby: true
     quotaAndLimits:
       enable: false
     log:
@@ -28,6 +28,17 @@ spec:
     imageUpdateMode: rollingUpgrade
     image: milvusdb/milvus:2.2.0-20231021-1f972292
     disableMetric: false
+    mixCoord:
+      commands:
+        - milvus
+        - run
+        - mixture
+        - -rootcoord
+        - -querycoord
+        - -datacoord
+        - -indexcoord
+        - --run-with-subprocess
+      replicas: 1
     standalone:
       commands:
         - milvus
