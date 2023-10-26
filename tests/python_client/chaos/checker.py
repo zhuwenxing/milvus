@@ -409,6 +409,12 @@ class SearchChecker(Checker):
         if collection_name is None:
             collection_name = cf.gen_unique_str("SearchChecker_")
         super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
+        # insert more data for search
+        for _ in range(0, constants.ENTITIES_FOR_SEARCH_BATCH):
+            self.c_wrap.insert(
+                data=cf.get_column_data_by_schema(nb=constants.ENTITIES_FOR_SEARCH_PER_BATCH, schema=schema, start=0),
+                timeout=timeout,
+                enable_traceback=enable_traceback)
         self.c_wrap.create_index(self.float_vector_field_name,
                                  constants.DEFAULT_INDEX_PARAM,
                                  index_name=cf.gen_unique_str('index_'),
@@ -668,6 +674,11 @@ class QueryChecker(Checker):
         if collection_name is None:
             collection_name = cf.gen_unique_str("QueryChecker_")
         super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
+        for i in range(0, constants.ENTITIES_FOR_SEARCH_BATCH):
+            self.c_wrap.insert(
+                data=cf.get_column_data_by_schema(nb=constants.ENTITIES_FOR_SEARCH_PER_BATCH, schema=schema, start=0),
+                timeout=timeout,
+                enable_traceback=enable_traceback)
         res, result = self.c_wrap.create_index(self.float_vector_field_name,
                                                constants.DEFAULT_INDEX_PARAM,
                                                index_name=cf.gen_unique_str(
