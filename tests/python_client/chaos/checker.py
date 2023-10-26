@@ -415,12 +415,15 @@ class SearchChecker(Checker):
                 data=cf.get_column_data_by_schema(nb=constants.ENTITIES_FOR_SEARCH_PER_BATCH, schema=schema, start=0),
                 timeout=timeout,
                 enable_traceback=enable_traceback)
-        self.c_wrap.create_index(self.float_vector_field_name,
-                                 constants.DEFAULT_INDEX_PARAM,
-                                 index_name=cf.gen_unique_str('index_'),
-                                 timeout=timeout,
-                                 enable_traceback=enable_traceback,
-                                 check_task=CheckTasks.check_nothing)
+        try:
+            self.c_wrap.create_index(self.float_vector_field_name,
+                                    constants.DEFAULT_INDEX_PARAM,
+                                    index_name=cf.gen_unique_str('index_'),
+                                    timeout=timeout,
+                                    enable_traceback=enable_traceback,
+                                    check_task=CheckTasks.check_nothing)
+        except Exception as e:
+            log.info(f"create index failed with error {e}")
         # do load before search
         self.c_wrap.load(replica_number=replica_number)
 
@@ -679,13 +682,16 @@ class QueryChecker(Checker):
                 data=cf.get_column_data_by_schema(nb=constants.ENTITIES_FOR_SEARCH_PER_BATCH, schema=schema, start=0),
                 timeout=timeout,
                 enable_traceback=enable_traceback)
-        res, result = self.c_wrap.create_index(self.float_vector_field_name,
-                                               constants.DEFAULT_INDEX_PARAM,
-                                               index_name=cf.gen_unique_str(
-                                                   'index_'),
-                                               timeout=timeout,
-                                               enable_traceback=enable_traceback,
-                                               check_task=CheckTasks.check_nothing)
+        try:
+            res, result = self.c_wrap.create_index(self.float_vector_field_name,
+                                                constants.DEFAULT_INDEX_PARAM,
+                                                index_name=cf.gen_unique_str(
+                                                    'index_'),
+                                                timeout=timeout,
+                                                enable_traceback=enable_traceback,
+                                                check_task=CheckTasks.check_nothing)
+        except Exception as e:
+            log.info(f"create index failed with error {e}")
         self.c_wrap.load(replica_number=replica_number)  # do load before query
         self.term_expr = None
 

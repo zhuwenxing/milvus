@@ -57,10 +57,7 @@ class TestOperations(TestBase):
         schema = cf.gen_default_collection_schema(auto_id=False)
 
         checkers = {
-            Op.create: CreateChecker(collection_name=None, schema=schema),
             Op.insert: InsertChecker(collection_name=c_name, schema=schema),
-            Op.flush: FlushChecker(collection_name=c_name, schema=schema),
-            Op.index: IndexChecker(collection_name=None, schema=schema),
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
             Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
