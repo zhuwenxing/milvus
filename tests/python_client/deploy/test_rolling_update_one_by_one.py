@@ -109,15 +109,17 @@ def pause_and_resume_rolling(metadata_name, deployment_name, namespace, updated_
           f"Waiting for {pause_seconds} seconds...")
     # Wait for the specified pause time
     t0 = time.time()
+    cnt = 0
     while time.time() - t0 < pause_seconds:
         cmd = f"kubectl get milvus {metadata_name} -o json|jq .spec.components"
         run_cmd(cmd)
         res = api_instance.read_namespaced_deployment(deployment_name, namespace)
         log.debug(f"deployment {deployment_name} status: {res.status}")
         time.sleep(10)
-
-    time.sleep(pause_seconds)
-
+        cnt += 1
+        # show progress every 60s
+        if cnt % 6 == 0:
+            log.info(f"progress: paused for {cnt * 10}s / {pause_seconds}s")
     # Resume the Deployment's rolling update
     config = {
         "spec": {
