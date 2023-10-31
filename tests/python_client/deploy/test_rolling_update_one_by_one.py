@@ -84,13 +84,13 @@ def pause_and_resume_rolling(metadata_name, deployment_name, namespace, updated_
         log.info(f"updated_replicas: {updated_replicas}, replicas: {replicas}")
         if updated_replicas is None:
             updated_replicas = 0
-            log.info(f"updated_replicas: {updated_replicas}, replicas: {replicas}, no replicas updated, keep waiting")
+            log.debug(f"updated_replicas: {updated_replicas}, replicas: {replicas}, no replicas updated, keep waiting")
         if updated_replicas >= updated_pod_count and updated_replicas < replicas:
-            log.info(
+            log.debug(
                 f"updated_replicas: {updated_replicas}, replicas: {replicas}, sastisfy the condition to pause the rolling update")
             break
         if updated_replicas >= replicas:
-            log.info(f"updated_replicas: {updated_replicas}, replicas: {replicas}, rolling update completed, no need to pause")
+            log.debug(f"updated_replicas: {updated_replicas}, replicas: {replicas}, rolling update completed, no need to pause")
             return
         time.sleep(1)
     # Pause the Deployment's rolling update by patching the custom resource
@@ -113,7 +113,7 @@ def pause_and_resume_rolling(metadata_name, deployment_name, namespace, updated_
         cmd = f"kubectl get milvus {metadata_name} -o json|jq .spec.components"
         run_cmd(cmd)
         res = api_instance.read_namespaced_deployment(deployment_name, namespace)
-        log.info(f"deployment {deployment_name} status: {res.status}")
+        log.debug(f"deployment {deployment_name} status: {res.status}")
         time.sleep(10)
 
     time.sleep(pause_seconds)
