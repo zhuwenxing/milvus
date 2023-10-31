@@ -23,8 +23,13 @@ def pytest_addoption(parser):
     parser.addoption('--data_size', type='int', action='store', default=3000, help="data size for deploy test")
     parser.addoption('--release_name', type=str, action='store', default="deploy-test", help="release name for deploy test")
     parser.addoption('--new_image_repo', type=str, action='store', default="harbor.milvus.io/dockerhub/milvusdb/milvus", help="image repo")
-    parser.addoption('--new_image_tag', type=str, action='store', default="v2.3.0", help="image tag")
-    parser.addoption('--components_order', type=str, action='store', default="['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'dataNode', 'queryNode', 'proxy']", help="components update order")
+    parser.addoption('--new_image_tag', type=str, action='store', default="master-20231031-ab6dbf76", help="image tag")
+    parser.addoption('--components_order', type=str, action='store', default="['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'queryNode', 'dataNode', 'proxy']", help="components update order")
+    parser.addoption('--paused_components', type=str, action='store',
+                     default="['queryNode']",
+                     help="components will be paused during rolling update")
+    parser.addoption('--paused_duration', type='int', action='store', default=600, help="paused duration for rolling update in some components")
+
 
 @pytest.fixture
 def data_size(request):
@@ -46,5 +51,12 @@ def new_image_tag(request):
 def components_order(request):
     return request.config.getoption("--components_order")
 
-# add a fixture for all index?
+@pytest.fixture
+def paused_components(request):
+    return request.config.getoption("--paused_components")
+
+@pytest.fixture
+def paused_duration(request):
+    return request.config.getoption("--paused_duration")
+
 

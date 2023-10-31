@@ -29,7 +29,7 @@ def interrupt_rolling(release_name, component, timeout=60):
     # get the querynode pod name which age is the newest
     cmd = f"kubectl get pod -n chaos-testing|grep {release_name}|grep {component}|awk '{{print $1}}'"
     output = run_cmd(cmd)
-    
+
     chaos_config = {}
     # apply chaos object
     chaos_res = CusResource(kind=chaos_config['kind'],
@@ -41,33 +41,95 @@ def interrupt_rolling(release_name, component, timeout=60):
     log.info("chaos injected")
 
 
-def pause_and_resume_deployment(deployment_name, namespace, updated_pod_count, pause_seconds):
+def pause_and_resume_rolling(metadata_name, deployment_name, namespace, updated_pod_count, pause_seconds):
+    """
+    Method: pause and resume the rolling update of a Deployment
+    Params:
+        metadata_name: name of the Milvus custom resource
+        deployment_name: name of the Deployment to pause and resume (choices: querynode, indexnode, datanode)
+        namespace: namespace that the Milvus custom resource is running in
+        updated_pod_count: number of Pods to update before pausing the rolling update
+        pause_seconds: number of seconds to pause the rolling update
+    example:
+        pause_and_resume_rolling("milvus-cluster", "milvus-cluster-querynode", "default", 1, 60)
+    """
     # Load Kubernetes configuration
+    from kubernetes import client, config
     config.load_kube_config()
-
     api_instance = client.AppsV1Api()
+
+    # resuem the rolling update of a Deployment if it is paused
+    config = {
+        "spec": {
+            "components":
+                {"paused": False}
+        }
+    }
+    with open("milvus_resume.yaml", "w") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    cmd = f"kubectl patch milvus {metadata_name} --patch-file milvus_resume.yaml --type merge"
+    run_cmd(cmd)
+    log.info(f"Resumed milvus {metadata_name} deployment {deployment_name}")
 
     # Monitor the number of updated Pods
     while True:
-        updated_replicas = api_instance.read_namespaced_deployment(deployment_name, namespace).status.updated_replicas
-        if updated_replicas >= updated_pod_count:
+        res = api_instance.read_namespaced_deployment(deployment_name, namespace)
+        log.info(f"deployment {deployment_name} status: {res.status}")
+
+        updated_replicas = api_instance.read_namespaced_deployment(deployment_name,
+                                                                   namespace).status.updated_replicas
+
+        replicas = api_instance.read_namespaced_deployment(deployment_name,
+                                                                   namespace).status.replicas
+        log.info(f"updated_replicas: {updated_replicas}, replicas: {replicas}")
+        if updated_replicas is None:
+            updated_replicas = 0
+            log.info(f"updated_replicas: {updated_replicas}, replicas: {replicas}, no replicas updated, keep waiting")
+        if updated_replicas >= updated_pod_count and updated_replicas < replicas:
+            log.info(
+                f"updated_replicas: {updated_replicas}, replicas: {replicas}, sastisfy the condition to pause the rolling update")
             break
-        time.sleep(5)
-
-    # Pause the Deployment's rolling update
-    deployment = api_instance.read_namespaced_deployment(deployment_name, namespace)
-    deployment.spec.paused = True
-    api_instance.patch_namespaced_deployment(deployment_name, namespace, deployment)
-    print(f"Paused deployment after updating {updated_replicas} replicas. Waiting for {pause_seconds} seconds...")
-
+        if updated_replicas >= replicas:
+            log.info(f"updated_replicas: {updated_replicas}, replicas: {replicas}, rolling update completed, no need to pause")
+            return
+        time.sleep(1)
+    # Pause the Deployment's rolling update by patching the custom resource
+    config = {
+        "spec": {
+            "components":
+                {"paused": True}
+        }
+    }
+    with open("milvus_pause.yaml", "w") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    time.sleep(1)
+    cmd = f"kubectl patch milvus {metadata_name} --patch-file milvus_pause.yaml --type merge"
+    run_cmd(cmd)
+    log.info(f"Paused Milvus {metadata_name} deployment {deployment_name} after updating {updated_pod_count} replicas. "
+          f"Waiting for {pause_seconds} seconds...")
     # Wait for the specified pause time
+    t0 = time.time()
+    while time.time() - t0 < pause_seconds:
+        cmd = f"kubectl get milvus {metadata_name} -o json|jq .spec.components"
+        run_cmd(cmd)
+        res = api_instance.read_namespaced_deployment(deployment_name, namespace)
+        log.info(f"deployment {deployment_name} status: {res.status}")
+        time.sleep(10)
+
     time.sleep(pause_seconds)
 
     # Resume the Deployment's rolling update
-    deployment = api_instance.read_namespaced_deployment(deployment_name, namespace)
-    deployment.spec.paused = False
-    api_instance.patch_namespaced_deployment(deployment_name, namespace, deployment)
-    print("Resumed deployment")
+    config = {
+        "spec": {
+            "components":
+                {"paused": False}
+        }
+    }
+    with open("milvus_resume.yaml", "w") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    cmd = f"kubectl patch milvus {metadata_name} --patch-file milvus_resume.yaml --type merge"
+    run_cmd(cmd)
+    log.info(f"Resumed milvus {metadata_name} deployment {deployment_name}")
 
 
 
@@ -77,18 +139,23 @@ def run_cmd(cmd):
     stdout, stderr = res.communicate()
     output = stdout.decode("utf-8")
     log.info(f"{cmd}\n{output}\n")
-    return output     
+    return output
 
 
 
 class TestOperations(TestBase):
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, new_image_repo, new_image_tag, components_order):
+    def test_operations(self, new_image_repo, new_image_tag, components_order, paused_components, paused_duration):
         log.info("*********************Rolling Update Start**********************")
+        paused_components = eval(paused_components)
+        log.info(f"paused_components: {paused_components}")
+        paused_duration =  int(paused_duration)
         origin_file_path = f"{str(Path(__file__).parent)}/milvus_crd.yaml"
+        log.info(f"origin_file_path: {origin_file_path}")
         with open(origin_file_path, "r") as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
+        log.info(f"config: {pformat(config['spec']['components'])}")
         target_image = f"{new_image_repo}:{new_image_tag}"
         if "image" in config["spec"]["components"]:
             del config["spec"]["components"]["image"]
@@ -100,7 +167,9 @@ class TestOperations(TestBase):
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
         kind = config["kind"]
         meta_name = config["metadata"]["name"]
-        components = eval(components_order) # default is ['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'dataNode', 'queryNode', 'proxy']
+        namespace = config["metadata"]["namespace"]
+        # default is ['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'queryNode', 'dataNode', 'proxy']
+        components = eval(components_order)
         log.info(f"update order: {components}")
         component_time_map = {}
         for component in components:
@@ -121,9 +190,13 @@ class TestOperations(TestBase):
             cmd = f"kubectl patch {kind} {meta_name} --patch-file {modified_file_path} --type merge"
             run_cmd(cmd)
             component_time_map[str(component)] = datetime.now()
-            if component in ["querynode", "datanode", "indexnode"]:
-                pause_and_resume_deployment(component, "chaos-testing", 1, 30)
 
+            if component in paused_components:
+                log.info(f"start to interrupt rolling update for {component}")
+                deploy_name = f"{meta_name}-milvus-{component.lower()}" if "milvus" not in component else f"{meta_name}-{component.lower()}"
+                cmd = f"kubectl get deployment | grep {deploy_name}"
+                run_cmd(cmd)
+                pause_and_resume_rolling(meta_name, deploy_name, namespace, 2, paused_duration)
             # check pod status
             log.info(prefix + "wait 10s after rolling update patch")
             sleep(10)
