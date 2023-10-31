@@ -8,8 +8,9 @@ from datetime import datetime
 from utils.util_log import test_log as log
 from common.common_type import CaseLabel
 from chaos import constants
-
-
+from common.cus_resource_opts import CustomResourceOperations as CusResource
+import time
+from kubernetes import client, config
 
 class TestBase:
     expect_create = constants.SUCC
@@ -23,6 +24,50 @@ class TestBase:
     _chaos_config = None
     health_checkers = {}
 
+
+def interrupt_rolling(release_name, component, timeout=60):
+    # get the querynode pod name which age is the newest
+    cmd = f"kubectl get pod -n chaos-testing|grep {release_name}|grep {component}|awk '{{print $1}}'"
+    output = run_cmd(cmd)
+    
+    chaos_config = {}
+    # apply chaos object
+    chaos_res = CusResource(kind=chaos_config['kind'],
+                            group=constants.CHAOS_GROUP,
+                            version=constants.CHAOS_VERSION,
+                            namespace=constants.CHAOS_NAMESPACE)
+    chaos_res.create(chaos_config)
+    create_time = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')
+    log.info("chaos injected")
+
+
+def pause_and_resume_deployment(deployment_name, namespace, updated_pod_count, pause_seconds):
+    # Load Kubernetes configuration
+    config.load_kube_config()
+
+    api_instance = client.AppsV1Api()
+
+    # Monitor the number of updated Pods
+    while True:
+        updated_replicas = api_instance.read_namespaced_deployment(deployment_name, namespace).status.updated_replicas
+        if updated_replicas >= updated_pod_count:
+            break
+        time.sleep(5)
+
+    # Pause the Deployment's rolling update
+    deployment = api_instance.read_namespaced_deployment(deployment_name, namespace)
+    deployment.spec.paused = True
+    api_instance.patch_namespaced_deployment(deployment_name, namespace, deployment)
+    print(f"Paused deployment after updating {updated_replicas} replicas. Waiting for {pause_seconds} seconds...")
+
+    # Wait for the specified pause time
+    time.sleep(pause_seconds)
+
+    # Resume the Deployment's rolling update
+    deployment = api_instance.read_namespaced_deployment(deployment_name, namespace)
+    deployment.spec.paused = False
+    api_instance.patch_namespaced_deployment(deployment_name, namespace, deployment)
+    print("Resumed deployment")
 
 
 
@@ -76,6 +121,9 @@ class TestOperations(TestBase):
             cmd = f"kubectl patch {kind} {meta_name} --patch-file {modified_file_path} --type merge"
             run_cmd(cmd)
             component_time_map[str(component)] = datetime.now()
+            if component in ["querynode", "datanode", "indexnode"]:
+                pause_and_resume_deployment(component, "chaos-testing", 1, 30)
+
             # check pod status
             log.info(prefix + "wait 10s after rolling update patch")
             sleep(10)

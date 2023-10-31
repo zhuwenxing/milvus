@@ -405,7 +405,7 @@ class Checker:
 class SearchChecker(Checker):
     """check search operations in a dependent thread"""
 
-    def __init__(self, collection_name=None, shards_num=2, replica_number=1, schema=None, ):
+    def __init__(self, collection_name=None, shards_num=4, replica_number=1, schema=None, ):
         if collection_name is None:
             collection_name = cf.gen_unique_str("SearchChecker_")
         super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
