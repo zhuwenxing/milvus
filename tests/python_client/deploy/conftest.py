@@ -28,7 +28,7 @@ def pytest_addoption(parser):
     parser.addoption('--paused_components', type=str, action='store',
                      default="['queryNode']",
                      help="components will be paused during rolling update")
-    parser.addoption('--paused_duration', type='int', action='store', default=600, help="paused duration for rolling update in some components")
+    parser.addoption('--paused_duration', type='int', action='store', default=300, help="paused duration for rolling update in some components")
 
 
 @pytest.fixture
