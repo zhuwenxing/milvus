@@ -19,7 +19,7 @@ from common.common_type import CaseLabel
 from common import common_func as cf
 from chaos.chaos_commons import assert_statistic
 from chaos import constants
-
+import pandas as pd
 
 class TestBase:
     expect_create = constants.SUCC
@@ -120,6 +120,19 @@ class TestOperations(TestBase):
             log.info(f"{k} failed request: {v.fail_records}")
         for k, v in self.health_checkers.items():
             log.info(f"{k} rto: {v.get_rto()}")
+        
+                # save result to parquet use pandas
+        result  = []
+        for k, v in self.health_checkers.items():
+            data = {
+                "op": k,
+                "failed request": v.fail_records,
+                "rto": v.get_rto()
+            }
+            result.append(data)
+        df = pd.DataFrame(result)
+        df.to_parquet("/tmp/ci/single_request_result.parquet")
+        log.info(f"result: {df}")
         if is_check:
             assert_statistic(self.health_checkers, succ_rate_threshold=0.98)
             # get each checker's rto
