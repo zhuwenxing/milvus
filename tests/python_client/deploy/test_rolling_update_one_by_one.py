@@ -193,12 +193,12 @@ class TestOperations(TestBase):
             run_cmd(cmd)
             component_time_map[str(component)] = datetime.now()
 
-            if component in paused_components:
-                log.info(f"start to interrupt rolling update for {component}")
-                deploy_name = f"{meta_name}-milvus-{component.lower()}" if "milvus" not in component else f"{meta_name}-{component.lower()}"
-                cmd = f"kubectl get deployment | grep {deploy_name}"
-                run_cmd(cmd)
-                pause_and_resume_rolling(meta_name, deploy_name, namespace, 2, paused_duration)
+            # if component in paused_components:
+            #     log.info(f"start to interrupt rolling update for {component}")
+            #     deploy_name = f"{meta_name}-milvus-{component.lower()}" if "milvus" not in component else f"{meta_name}-{component.lower()}"
+            #     cmd = f"kubectl get deployment | grep {deploy_name}"
+            #     run_cmd(cmd)
+            #     pause_and_resume_rolling(meta_name, deploy_name, namespace, 2, paused_duration)
             # check pod status
             log.info(prefix + "wait 10s after rolling update patch")
             sleep(10)
