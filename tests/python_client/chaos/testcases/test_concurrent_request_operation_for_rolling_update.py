@@ -106,7 +106,7 @@ class TestOperations(TestBase):
         df = pd.DataFrame(result)
         log.info(f"result: {df}")
         # save result to parquet
-        file_name = "/tmp/ci_logs/single_request_result.parquet"
+        file_name = "/tmp/ci_logs/concurrent_request_result.parquet"
         Path(file_name).parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(file_name)
         if is_check:
