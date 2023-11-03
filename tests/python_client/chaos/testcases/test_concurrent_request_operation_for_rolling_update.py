@@ -97,14 +97,18 @@ class TestOperations(TestBase):
         result  = []
         for k, v in self.health_checkers.items():
             data = {
-                "op": k,
-                "failed request": v.fail_records,
+                "op": str(k),
+                "failed request ts": [x[2] for x in v.fail_records],
+                "failed request order": [x[1] for x in v.fail_records],
                 "rto": v.get_rto()
             }
             result.append(data)
         df = pd.DataFrame(result)
-        df.to_parquet("/tmp/ci/concurrent_request_result.parquet")
         log.info(f"result: {df}")
+        # save result to parquet
+        file_name = "/tmp/ci_logs/single_request_result.parquet"
+        Path(file_name).parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(file_name)
         if is_check:
             assert_statistic(self.health_checkers, succ_rate_threshold=0.98)
             # get each checker's rto
