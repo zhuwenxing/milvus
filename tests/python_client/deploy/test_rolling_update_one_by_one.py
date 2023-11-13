@@ -148,7 +148,7 @@ def run_cmd(cmd):
 class TestOperations(TestBase):
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, new_image_repo, new_image_tag, components_order, paused_components, paused_duration):
+    def test_operations(self, new_image_repo, new_image_tag, components_order, update_mode, paused_components, paused_duration):
         log.info("*********************Rolling Update Start**********************")
         paused_components = eval(paused_components)
         log.info(f"paused_components: {paused_components}")
@@ -172,6 +172,8 @@ class TestOperations(TestBase):
         namespace = config["metadata"]["namespace"]
         # default is ['indexNode', 'rootCoord', ['dataCoord', 'indexCoord'], 'queryCoord', 'queryNode', 'dataNode', 'proxy']
         components = eval(components_order)
+        if update_mode == "downgrade":
+            components.reverse()
         log.info(f"update order: {components}")
         component_time_map = {}
         for component in components:

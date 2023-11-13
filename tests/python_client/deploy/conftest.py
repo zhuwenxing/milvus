@@ -1,17 +1,4 @@
-import logging
-
 import pytest
-import functools
-import socket
-
-import common.common_type as ct
-import common.common_func as cf
-from utils.util_log import test_log as log
-from common.common_func import param_info
-from check.param_check import ip_check, number_check
-from config.log_config import log_config
-from utils.util_pymilvus import get_milvus, gen_unique_str, gen_default_fields, gen_binary_default_fields
-from pymilvus.orm.types import CONSISTENCY_STRONG
 
 timeout = 60
 dimension = 128
@@ -29,6 +16,7 @@ def pytest_addoption(parser):
                      default="['queryNode']",
                      help="components will be paused during rolling update")
     parser.addoption('--paused_duration', type='int', action='store', default=300, help="paused duration for rolling update in some components")
+    parser.addoption('--update_mode', type=str, action='store', default="upgrade", help="update mode for rolling update, upgrade or downgrade")
 
 
 @pytest.fixture
@@ -59,4 +47,7 @@ def paused_components(request):
 def paused_duration(request):
     return request.config.getoption("--paused_duration")
 
+@pytest.fixture
+def update_mode(request):
+    return request.config.getoption("--update_mode")
 
