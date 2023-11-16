@@ -29,24 +29,78 @@ spec:
     image: milvusdb/milvus:2.2.0-20231021-1f972292
     disableMetric: false
     mixCoord:
+      commands:
+        - milvus
+        - run
+        - mixture
+        - -rootcoord
+        - -querycoord
+        - -datacoord
+        - -indexcoord
+        - --run-with-subprocess
       replicas: 1
     standalone:
+      commands:
+        - milvus
+        - run
+        - standalone
+        - --run-with-subprocess
       replicas: 1
     rootCoord:
+      commands:
+        - milvus
+        - run
+        - rootcoord
+        - --run-with-subprocess
       replicas: 1
     dataCoord:
+      commands:
+        - milvus
+        - run
+        - datacoord
+        - --run-with-subprocess
       replicas: 1
     indexCoord:
+      commands:
+        - milvus
+        - run
+        - indexcoord
+        - --run-with-subprocess
       replicas: 1
     queryCoord:
+      commands:
+        - milvus
+        - run
+        - querycoord
+        - --run-with-subprocess
       replicas: 1
     proxy:
+      commands:
+        - milvus
+        - run
+        - proxy
+        - --run-with-subprocess
       replicas: 1
     dataNode:
+      commands:
+        - milvus
+        - run
+        - datanode
+        - --run-with-subprocess
       replicas: 3
     indexNode:
+      commands:
+        - milvus
+        - run
+        - indexnode
+        - --run-with-subprocess
       replicas: 3
     queryNode:
+      commands:
+        - milvus
+        - run
+        - querynode
+        - --run-with-subprocess
       replicas: 3
   dependencies:
     msgStreamType: kafka

@@ -37,7 +37,7 @@ def run_cmd(cmd):
 class TestOperations(TestBase):
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, new_image_repo, new_image_tag, update_mode):
+    def test_operations(self, new_image_repo, new_image_tag):
         log.info("*********************Rolling Update Start**********************")
         origin_file_path = f"{str(Path(__file__).parent)}/milvus_crd.yaml"
         with open(origin_file_path, "r") as f:
@@ -45,8 +45,6 @@ class TestOperations(TestBase):
         target_image = f"{new_image_repo}:{new_image_tag}"
         config["spec"]["components"]["image"] = target_image
         config["spec"]["components"]["imageUpdateMode"] = "rollingUpgrade"
-        if update_mode == "downgrade":
-            config["spec"]["components"]["imageUpdateMode"] = "rollingDowngrade"
         log.info(f"config: {pformat(config['spec']['components'])}")
         components = ["indexNode", "rootCoord", "dataCoord", "indexCoord", "queryCoord", "dataNode", "queryNode", "proxy", "standalone", "mixCoord"]
         # delete image in specific component
