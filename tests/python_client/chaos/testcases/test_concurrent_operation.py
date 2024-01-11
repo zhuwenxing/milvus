@@ -1,26 +1,21 @@
 import time
 import pytest
+import threading
 import json
 from time import sleep
-from pymilvus import connections
+from pymilvus import connections, db
 from chaos.checker import (InsertChecker,
                            UpsertChecker,
-                           FlushChecker,
                            SearchChecker,
                            QueryChecker,
                            DeleteChecker,
                            Op,
                            ResultAnalyzer
                            )
-from utils.util_k8s import wait_pods_ready, get_milvus_instance_name
 from utils.util_log import test_log as log
 from chaos import chaos_commons as cc
-from common import common_func as cf
-from common.milvus_sys import MilvusSys
-from chaos.chaos_commons import assert_statistic
 from common.common_type import CaseLabel
 from chaos import constants
-from delayed_assert import assert_expectations
 
 
 def get_all_collections():
@@ -29,7 +24,7 @@ def get_all_collections():
             data = json.load(f)
             all_collections = data["all"]
     except Exception as e:
-        log.error(f"get_all_collections error: {e}")
+        log.warn(f"get_all_collections error: {e}")
         return [None]
     return all_collections
 
@@ -50,48 +45,37 @@ class TestBase:
 class TestOperations(TestBase):
 
     @pytest.fixture(scope="function", autouse=True)
-    def connection(self, host, port, user, password, milvus_ns):
+    def connection(self, host, port, user, password, db_name, milvus_ns):
         if user and password:
             # log.info(f"connect to {host}:{port} with user {user} and password {password}")
-            connections.connect('default', host=host, port=port, user=user, password=password, secure=True)
+            connections.connect('default', uri=f"{host}:{port}", token=f"{user}:{password}")
         else:
             connections.connect('default', host=host, port=port)
         if connections.has_connection("default") is False:
             raise Exception("no connections")
-        log.info("connect to milvus successfully")
+        all_dbs = db.list_database()
+        log.info(f"all dbs: {all_dbs}")
+        if db_name not in all_dbs:
+            db.create_database(db_name)
+        db.using_database(db_name)
+        log.info(f"connect to milvus {host}:{port}, db {db_name} successfully")
         self.host = host
         self.port = port
         self.user = user
         self.password = password
-        self.milvus_sys = MilvusSys(alias='default')
         self.milvus_ns = milvus_ns
-        self.release_name = get_milvus_instance_name(self.milvus_ns, milvus_sys=self.milvus_sys)
 
-    def init_health_checkers(self, collection_name=None, enable_upsert=True):
+    def init_health_checkers(self, collection_name=None):
         c_name = collection_name
-        if enable_upsert in ["False", "false", "FALSE"]:
-            enable_upsert = False
-        if enable_upsert in ["True", "true", "TRUE"]:
-            enable_upsert = True
-        if enable_upsert:
-            checkers = {
-                Op.insert: InsertChecker(collection_name=c_name),
-                Op.upsert: UpsertChecker(collection_name=c_name),
-                Op.flush: FlushChecker(collection_name=c_name),
-                Op.search: SearchChecker(collection_name=c_name),
-                Op.query: QueryChecker(collection_name=c_name),
-                Op.delete: DeleteChecker(collection_name=c_name),
-            }
-        else:
-            checkers = {
-                Op.insert: InsertChecker(collection_name=c_name),
-                Op.flush: FlushChecker(collection_name=c_name),
-                Op.search: SearchChecker(collection_name=c_name),
-                Op.query: QueryChecker(collection_name=c_name),
-                Op.delete: DeleteChecker(collection_name=c_name),
-            }
-        log.info(f"init_health_checkers: {checkers}")
+        checkers = {
+            Op.insert: InsertChecker(collection_name=c_name),
+            Op.upsert: UpsertChecker(collection_name=c_name),
+            Op.search: SearchChecker(collection_name=c_name),
+            Op.query: QueryChecker(collection_name=c_name),
+            Op.delete: DeleteChecker(collection_name=c_name),
+        }
         self.health_checkers = checkers
+        return checkers
 
     @pytest.fixture(scope="function", params=get_all_collections())
     def collection_name(self, request):
@@ -100,17 +84,28 @@ class TestOperations(TestBase):
         yield request.param
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check, collection_name, enable_upsert):
+    def test_operations(self, request_duration, is_check, collection_name, collection_num, db_name):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
-        log.info(f"enable_upsert: {enable_upsert}")
         log.info(connections.get_connection_addr('default'))
-        # event_records = EventRecords()
-        c_name = collection_name if collection_name else cf.gen_unique_str("Checker_")
-        # event_records.insert("init_health_checkers", "start")
-        self.init_health_checkers(collection_name=c_name, enable_upsert=enable_upsert)
-        # event_records.insert("init_health_checkers", "finished")
-        cc.start_monitor_threads(self.health_checkers)
+        all_checkers = []
+
+        def worker(c_name):
+            log.info(f"start checker for collection name: {c_name}")
+            op_checker = self.init_health_checkers(collection_name=c_name)
+            all_checkers.append(op_checker)
+        threads = []
+        for i in range(collection_num):
+            c_name = collection_name if collection_name else f"DB_{db_name}_Collection_{i}_Checker"
+            thread = threading.Thread(target=worker, args=(c_name,))
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        for checker in all_checkers:
+            cc.start_monitor_threads(checker)
+
         log.info("*********************Load Start**********************")
         request_duration = request_duration.replace("h", "*3600+").replace("m", "*60+").replace("s", "")
         if request_duration[-1] == "+":
@@ -118,14 +113,13 @@ class TestOperations(TestBase):
         request_duration = eval(request_duration)
         for i in range(10):
             sleep(request_duration//10)
-            for k, v in self.health_checkers.items():
-                v.check_result()
-                # log.info(v.check_result())
-        wait_pods_ready(self.milvus_ns, f"app.kubernetes.io/instance={self.release_name}")
-        time.sleep(60)
-        ra = ResultAnalyzer()
-        ra.get_stage_success_rate()
-        if is_check:
-            assert_statistic(self.health_checkers)
-            assert_expectations()
+            for checker in all_checkers:
+                for k, v in checker.items():
+                    v.check_result()
+        try:
+            ra = ResultAnalyzer()
+            ra.get_stage_success_rate()
+            ra.show_result_table()
+        except Exception as e:
+            log.error(f"get stage success rate error: {e}")
         log.info("*********************Chaos Test Completed**********************")

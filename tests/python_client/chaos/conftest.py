@@ -13,7 +13,7 @@ def pytest_addoption(parser):
     parser.addoption("--is_check", action="store", type=bool, default=False, help="is_check")
     parser.addoption("--enable_upsert", action="store", type=str, default="true", help="enable_upsert")
     parser.addoption("--wait_signal", action="store", type=bool, default=True, help="wait_signal")
-    parser.addoption("--collection_num", action="store", default="1", help="collection_num")
+    parser.addoption("--collection_num", action="store", type=int, default=1, help="collection_num")
 
 
 @pytest.fixture
