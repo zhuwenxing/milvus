@@ -400,7 +400,7 @@ class Checker:
         max_time = 0 if len(rsp_times) == 0 else max(rsp_times)
         min_time = 0 if len(rsp_times) == 0 else min(rsp_times)
         checker_name = self.__class__.__name__
-        checkers_result = f"{checker_name}, succ_rate: {succ_rate:.2f}, total: {total:03d}, average_time: {average_time:.4f}, max_time: {max_time:.4f}, min_time: {min_time:.4f}"
+        checkers_result = f"{checker_name} collection {self.c_wrap.name}, succ_rate: {succ_rate:.2f}, total: {total:03d}, average_time: {average_time:.4f}, max_time: {max_time:.4f}, min_time: {min_time:.4f}"
         log.info(checkers_result)
         log.debug(f"{checker_name} rsp times: {self.rsp_times}")
         if len(self.fail_records) > 0:
