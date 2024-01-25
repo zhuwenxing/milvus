@@ -17,6 +17,7 @@ from loguru import logger
 import json
 import collections.abc
 from deepdiff import DeepDiff
+from py import log
 from pymilvus import connections, Collection, db, list_collections
 import threading
 
@@ -53,19 +54,20 @@ def get_collection_info(info, db_name, c_name):
         replicas = len(c.get_replicas().groups)
     except Exception as e:
         logger.warning(e)
+        logger.info(f"no replica for {db_name}.{c_name}")
         replicas = 0
     logger.info(replicas)
     info[db_name][c_name]['replicas'] = replicas    
     if replicas > 0:
-        logger.warning(f"no replica for {db_name}.{c_name}")
-        logger.info(f"start query {db_name}.{c_name}")
-        res = c.query(expr="", output_fields=["count(*)"], timeout=60)
-        cnt = res[0]["count(*)"]
-        logger.info(cnt)
-        info[db_name][c_name]['cnt'] = cnt
-    else:
-        info[db_name][c_name]['cnt'] = "query failed"
-
+        try:
+            logger.info(f"start query {db_name}.{c_name}")
+            res = c.query(expr="", output_fields=["count(*)"], timeout=60)
+            cnt = res[0]["count(*)"]
+            logger.info(cnt)
+            info[db_name][c_name]['cnt'] = cnt
+        except Exception as e:
+            logger.warning(f"failed to query {db_name}.{c_name}: {e}")
+            info[db_name][c_name]['cnt'] = -1
 
 def get_cluster_info(host, port, user, password):
     try:
@@ -112,6 +114,7 @@ if __name__ == '__main__':
     logger.info(f"downstream info: {json.dumps(downstream, indent=2)}")
     diff = DeepDiff(upstream, downstream)
     diff = convert_deepdiff(diff)
+    logger.info(f"diff: {diff}")
     logger.info(f"diff: {json.dumps(diff, indent=2)}")
     with open("diff.json", "w") as f:
         json.dump(diff, f, indent=2)
