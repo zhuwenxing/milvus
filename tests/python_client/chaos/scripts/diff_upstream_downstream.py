@@ -36,8 +36,8 @@ def get_collection_info(info, db_name, c_name):
     # flush and compact
     logger.info(f"start flush and compact {db_name}.{c_name}")
     try:
-        c.flush(timeout=60)
-        c.compact(timeout=60)
+        c.flush(timeout=10)
+        c.compact(timeout=10)
         logger.info(f"finished flush and compact {db_name}.{c_name}")
     except Exception as e:
         logger.warning(f"failed to flush and compact {db_name}.{c_name}: {e}")
@@ -118,4 +118,10 @@ if __name__ == '__main__':
     logger.info(f"diff: {json.dumps(diff, indent=2)}")
     with open("diff.json", "w") as f:
         json.dump(diff, f, indent=2)
-
+    excludedRegex = [r"root(\[\'\w+\'\])*\['num_entities'\]"]
+    diff = DeepDiff(upstream, downstream, exclude_regex_paths=excludedRegex)
+    diff = convert_deepdiff(diff)
+    logger.info(f"diff exclude num entities: {diff}")
+    logger.info(f"diff exclude num entities: {json.dumps(diff, indent=2)}")
+    if diff:
+        assert False, f"diff exclude num entities found between upstream and downstream {json.dumps(diff, indent=2)}"
