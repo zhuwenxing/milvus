@@ -35,8 +35,8 @@ def get_collection_info(info, db_name, c_name):
     # flush and compact
     logger.info(f"start flush and compact {db_name}.{c_name}")
     try:
-        c.flush(timeout=120)
-        c.compact(timeout=120)
+        c.flush(timeout=60)
+        c.compact(timeout=60)
         logger.info(f"finished flush and compact {db_name}.{c_name}")
     except Exception as e:
         logger.warning(f"failed to flush and compact {db_name}.{c_name}: {e}")
@@ -51,17 +51,20 @@ def get_collection_info(info, db_name, c_name):
     info[db_name][c_name]['partitions'] = len([p.name for p in c.partitions])
     try:
         replicas = len(c.get_replicas().groups)
+    except Exception as e:
+        logger.warning(e)
+        replicas = 0
+    logger.info(replicas)
+    info[db_name][c_name]['replicas'] = replicas    
+    if replicas > 0:
+        logger.warning(f"no replica for {db_name}.{c_name}")
         logger.info(f"start query {db_name}.{c_name}")
         res = c.query(expr="", output_fields=["count(*)"], timeout=60)
         cnt = res[0]["count(*)"]
         logger.info(cnt)
         info[db_name][c_name]['cnt'] = cnt
-    except Exception as e:
-        logger.warning(e)
-        replicas = 0
-
-    logger.info(replicas)
-    info[db_name][c_name]['replicas'] = replicas
+    else:
+        info[db_name][c_name]['cnt'] = "query failed"
 
 
 def get_cluster_info(host, port, user, password):
