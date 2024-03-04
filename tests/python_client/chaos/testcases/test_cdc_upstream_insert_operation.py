@@ -66,7 +66,7 @@ class TestOperations(TestBase):
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
         event_records = EventRecords()
-        c_name = None
+        c_name = "CDC_Insert_Checker"
         event_records.insert("init_health_checkers", "start")
         self.init_health_checkers(collection_name=c_name)
         event_records.insert("init_health_checkers", "finished")
