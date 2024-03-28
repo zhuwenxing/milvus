@@ -78,6 +78,10 @@ class TestChaosApply:
         update_key_value(chaos_config, "namespaces", [self.milvus_ns])
         update_key_value(chaos_config, "value", target_number)
         update_key_value(chaos_config, "mode", target_scope)
+        if "node" in target_component:
+            update_key_value(chaos_config, "mode", "one")
+        if target_component == "querynode":
+            update_key_value(chaos_config, "gracePeriod", 1)
         self.chaos_config = chaos_config
         if "s" in chaos_interval:
             schedule = f"*/{chaos_interval[:-1]} * * * * *"
