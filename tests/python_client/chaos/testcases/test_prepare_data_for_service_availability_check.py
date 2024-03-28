@@ -81,15 +81,18 @@ class TestOperations(TestBase):
                 utility.wait_for_index_building_complete(v.c_name, timeout=120)
                 res = utility.index_building_progress(v.c_name)
                 index_completed = res["pending_index_rows"] == 0
-                t0 = time.time()
-                while not index_completed:
-                    time.sleep(10)
-                    res = utility.index_building_progress(v.c_name)
+
+                index_names = [x.index_name for x in v.c_wrap.indexes]
+                for index_name in index_names:
+                    t0 = time.time()
+                    while not index_completed:
+                        time.sleep(10)
+                        res = utility.index_building_progress(v.c_name, index_name)
+                        log.info(f"index building progress: {res}")
+                        index_completed = res["pending_index_rows"] == 0
+                        if time.time() - t0 > 180:
+                            break
                     log.info(f"index building progress: {res}")
-                    index_completed = res["pending_index_rows"] == 0
-                    if time.time() - t0 > 360:
-                        break
-                log.info(f"index building progress: {res}")
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
