@@ -1,23 +1,18 @@
-from pathlib import Path
 import time
 import pytest
 from time import sleep
-from yaml import full_load
 from pymilvus import connections, utility
-from chaos.checker import (UpsertChecker,
-                           InsertChecker,
+from chaos.checker import (
                            SearchChecker,
                            QueryChecker,
-                           DeleteChecker,
                            Op)
-from utils.util_k8s import wait_pods_ready
 from utils.util_log import test_log as log
 from chaos import chaos_commons as cc
 from common.common_type import CaseLabel
 from common import common_func as cf
 from chaos.chaos_commons import assert_statistic
 from chaos import constants
-import pandas as pd
+import random
 
 class TestBase:
     expect_create = constants.SUCC
@@ -51,25 +46,50 @@ class TestOperations(TestBase):
         self.minio_endpoint = f"{minio_host}:9000"
 
     def init_health_checkers(self, collection_name=None):
+
         c_name = collection_name
         schema = cf.gen_default_collection_schema(auto_id=False)
 
         checkers = {
-            Op.insert: InsertChecker(collection_name=c_name, schema=schema),
-            Op.upsert: UpsertChecker(collection_name=c_name, schema=schema),
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
-            Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
         }
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check):
+    def test_operations(self, request_duration):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
-        c_name = cf.gen_unique_str("Checker_")
+        c_name = "Checker_Service_Availability"
         self.init_health_checkers(collection_name=c_name)
+        # prepare data by bulk insert
+        log.info("*********************Prepare Data by bulk insert**********************")
+        for k, v in self.health_checkers.items():
+            if k in [Op.search, Op.query]:
+                log.info(f"prepare bulk insert data for {k}")
+                v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
+                completed = False
+                retry_times = 0
+                while not completed and retry_times < 3:
+                    completed, result = v.do_bulk_insert()
+                    if not completed:
+                        log.info(f"do bulk insert failed: {result}")
+                        retry_times += 1
+                        sleep(5)
+                # wait for index building complete
+                utility.wait_for_index_building_complete(v.c_name, timeout=120)
+                res = utility.index_building_progress(v.c_name)
+                index_completed = res["pending_index_rows"] == 0
+                t0 = time.time()
+                while not index_completed:
+                    time.sleep(10)
+                    res = utility.index_building_progress(v.c_name)
+                    log.info(f"index building progress: {res}")
+                    index_completed = res["pending_index_rows"] == 0
+                    if time.time() - t0 > 360:
+                        break
+                log.info(f"index building progress: {res}")
 
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
@@ -91,28 +111,10 @@ class TestOperations(TestBase):
             log.info(f"{k} failed request: {v.fail_records}")
         for k, v in self.health_checkers.items():
             log.info(f"{k} rto: {v.get_rto()}")
-
-        # save result to parquet use pandas
-        result = []
+        assert_statistic(self.health_checkers, succ_rate_threshold=1.0)
+        # get each checker's rto
         for k, v in self.health_checkers.items():
-            data = {
-                "op": str(k),
-                "failed request ts": [x[2] for x in v.fail_records],
-                "failed request order": [x[1] for x in v.fail_records],
-                "rto": v.get_rto()
-            }
-            result.append(data)
-        df = pd.DataFrame(result)
-        log.info(f"result: {df}")
-        # save result to parquet
-        file_name = "/tmp/ci_logs/concurrent_request_result.parquet"
-        Path(file_name).parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(file_name)
-        if is_check:
-            assert_statistic(self.health_checkers, succ_rate_threshold=0.98)
-            # get each checker's rto
-            for k, v in self.health_checkers.items():
-                log.info(f"{k} rto: {v.get_rto()}")
-                rto = v.get_rto()
-                pytest.assume(rto < 30,  f"{k} rto expect 30s but get {rto}s")  # rto should be less than 30s
+            log.info(f"{k} rto: {v.get_rto()}")
+            rto = v.get_rto()
+            pytest.assume(rto < 30,  f"{k} rto expect 30s but get {rto}s")  # rto should be less than 30s
         log.info("*********************Test Completed**********************")
