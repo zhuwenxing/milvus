@@ -78,12 +78,11 @@ class TestOperations(TestBase):
                         retry_times += 1
                         sleep(5)
                 # wait for index building complete
-                utility.wait_for_index_building_complete(v.c_name, timeout=120)
-                res = utility.index_building_progress(v.c_name)
-                index_completed = res["pending_index_rows"] == 0
-
                 index_names = [x.index_name for x in v.c_wrap.indexes]
                 for index_name in index_names:
+                    utility.wait_for_index_building_complete(v.c_name, index_name)
+                    res = utility.index_building_progress(v.c_name, index_name)
+                    index_completed = res["pending_index_rows"] == 0
                     t0 = time.time()
                     while not index_completed:
                         time.sleep(10)
