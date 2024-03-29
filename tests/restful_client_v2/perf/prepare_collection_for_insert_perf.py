@@ -18,9 +18,9 @@ def main(host="127.0.0.1"):
         Collection(name=collection_name).drop()
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=10000),
+        # FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=10000),
         FieldSchema(name="text_emb", dtype=DataType.FLOAT_VECTOR, dim=768),
-        FieldSchema(name="image_emb", dtype=DataType.FLOAT_VECTOR, dim=768)
+        # FieldSchema(name="image_emb", dtype=DataType.FLOAT_VECTOR, dim=768)
     ]
     schema = CollectionSchema(fields=fields, description="test collection")
     collection = Collection(name=collection_name, schema=schema)

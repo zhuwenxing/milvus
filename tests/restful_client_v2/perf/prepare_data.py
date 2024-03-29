@@ -25,9 +25,9 @@ def prepare_data(host="127.0.0.1", port=19530, data_size=1000000, minio_host="12
         Collection(name=collection_name).drop()
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=10000),
+        # FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=10000),
         FieldSchema(name="text_emb", dtype=DataType.FLOAT_VECTOR, dim=768),
-        FieldSchema(name="image_emb", dtype=DataType.FLOAT_VECTOR, dim=768)
+        # FieldSchema(name="image_emb", dtype=DataType.FLOAT_VECTOR, dim=768)
     ]
     schema = CollectionSchema(fields=fields, description="test collection")
     collection = Collection(name=collection_name, schema=schema)
@@ -48,9 +48,9 @@ def prepare_data(host="127.0.0.1", port=19530, data_size=1000000, minio_host="12
         for i in range(data_size):
             row = {
                 "id": i,
-                "text": str(i%10)+fake.text(max_nb_chars=1000),
+                # "text": str(i%10)+fake.text(max_nb_chars=1000),
                 "text_emb": [random.random() for _ in range(768)],
-                "image_emb": [random.random() for _ in range(768)]
+                # "image_emb": [random.random() for _ in range(768)]
             }
             remote_writer.append_row(row)
         remote_writer.commit()
@@ -75,8 +75,8 @@ def prepare_data(host="127.0.0.1", port=19530, data_size=1000000, minio_host="12
 
     logger.info(f"inserted {data_size} vectors")
     collection.create_index("text_emb", index_params=index_params)
-    collection.create_index("image_emb", index_params=index_params)
-    collection.create_index("text", index_params={"index_type": "INVERTED"})
+    # collection.create_index("image_emb", index_params=index_params)
+    # collection.create_index("text", index_params={"index_type": "INVERTED"})
     index_list = utility.list_indexes(collection_name=collection_name)
     for index_name in index_list:
         progress = utility.index_building_progress(collection_name=collection_name, index_name=index_name)
