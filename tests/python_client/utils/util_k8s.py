@@ -56,6 +56,7 @@ def wait_pods_ready(namespace, label_selector, expected_num=None, timeout=360):
     api_instance = client.CoreV1Api()
     try:
         all_pos_ready_flag = False
+        api_response = api_instance.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
         t0 = time.time()
         while not all_pos_ready_flag and time.time() - t0 < timeout:
             api_response = api_instance.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
@@ -77,6 +78,7 @@ def wait_pods_ready(namespace, label_selector, expected_num=None, timeout=360):
                 time.sleep(5)
         if all_pos_ready_flag:
             log.info(f"all pods in namespace {namespace} with label {label_selector} are ready")
+            log.info(f"pod status: {api_response.items}")
         else:
             log.info(f"timeout for waiting all pods in namespace {namespace} with label {label_selector} ready")
     except ApiException as e:
