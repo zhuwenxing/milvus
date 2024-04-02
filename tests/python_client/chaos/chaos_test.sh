@@ -21,12 +21,12 @@ ns="chaos-testing"
 
 # set parameters
 pod=${1:-"querynode"}
-chaos_type=${2:-"pod_kill"} #pod_kill or pod_failure
-chaos_task=${3:-"chaos-test"} # chaos-test or data-consist-test 
+chaos_type=${2:-"pod_kill"} #pod_kill_schedule or pod_failure
+chaos_task=${3:-"chaos-test"} # chaos-test or data-consist-test
 node_num=${4:-1} # cluster_1_node or cluster_n_nodes
 
 cur_time=$(date +%H-%M-%S)
-release_name="test"-${pod}-${chaos_type/_/-}-${cur_time} # replace pod_kill to pod-kill
+release_name="test"-${pod}-${chaos_type/_/-}-${cur_time} # replace pod_kill_schedule to pod-kill
 release=${RELEASE_NAME:-"${release_name}"}
 
 # replace separator to default

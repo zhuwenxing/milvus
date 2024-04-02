@@ -2,7 +2,7 @@ import pytest
 
 
 def pytest_addoption(parser):
-    parser.addoption("--chaos_type", action="store", default="pod_kill", help="chaos_type")
+    parser.addoption("--chaos_type", action="store", default="pod_kill_schedule", help="chaos_type")
     parser.addoption("--role_type", action="store", default="activated", help="role_type")
     parser.addoption("--target_component", action="store", default="querynode", help="target_component")
     parser.addoption("--target_pod", action="store", default="etcd_leader", help="target_pod")
