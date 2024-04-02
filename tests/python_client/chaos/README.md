@@ -3,13 +3,13 @@
 Chaos tests are designed to check the reliability of Milvus.
 
 For instance, if one pod is killed:
-   - verify that it restarts automatically 
+   - verify that it restarts automatically
    - verify that the related operation fails, while the other operations keep working successfully during the absence of the pod
    - verify that all the operations work successfully after the pod back to running state
    - verify that no data lost
 
 ## Prerequisite
-Chaos tests run in pytest framework, same as e2e tests. 
+Chaos tests run in pytest framework, same as e2e tests.
 
 Please refer to [Run E2E Tests](https://github.com/milvus-io/milvus/blob/master/tests/README.md)
 
@@ -76,15 +76,15 @@ Run test scenario automatically:
    cd /milvus/tests/python_client/chaos
    # in this step, script will install milvus with replicas_num and run testcase
    bash chaos_test.sh ${pod} ${chaos_type} ${chaos_task} ${replicas_num}
-   # example: bash chaos_test.sh querynode pod_kill chaos-test 2
+   # example: bash chaos_test.sh querynode pod_kill_schedule chaos-test 2
    ```
 ### Github Action
 * [Pod Kill Chaos Test](https://github.com/milvus-io/milvus/actions/workflows/pod-kill-chaos-test.yaml)
 * [Pod Failure Chaos Test](https://github.com/milvus-io/milvus/blob/master/.github/workflows/pod-failure-chaos-test.yaml)
 * [Network Partition Chaos Test](https://github.com/milvus-io/milvus/actions/workflows/network-partition-chaos-test.yaml)
 
-### Nightly 
-still in planning 
+### Nightly
+still in planning
 
 ### Todo
 - [ ] network attack
@@ -97,4 +97,4 @@ still in planning
 * Generate yaml file for your chaos scenarios. You can create a chaos experiment in chaos-dashboard, then download the yaml file of it.
 * Add yaml file to chaos_objects dir and rename it as `chaos_${component_name}_${chaos_type}.yaml`. Make sure `kubectl apply -f ${your_chaos_yaml_file}` can take effect
 * Add testcase in `testcases.yaml`. You should figure out the expectation of milvus during the chaos
-* Run your added testcase according to `Manually` above and check whether it as your expectation 
+* Run your added testcase according to `Manually` above and check whether it as your expectation
