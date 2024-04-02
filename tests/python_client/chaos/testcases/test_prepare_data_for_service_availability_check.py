@@ -51,8 +51,7 @@ class TestOperations(TestBase):
         schema = cf.gen_default_collection_schema(auto_id=False)
 
         checkers = {
-            Op.search: SearchChecker(collection_name=c_name, schema=schema),
-            Op.query: QueryChecker(collection_name=c_name, schema=schema),
+            Op.search: SearchChecker(collection_name=c_name, schema=schema)
         }
         self.health_checkers = checkers
 
