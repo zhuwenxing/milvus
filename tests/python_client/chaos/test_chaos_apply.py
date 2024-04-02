@@ -9,7 +9,7 @@ from common.cus_resource_opts import CustomResourceOperations as CusResource
 from common.milvus_sys import MilvusSys
 from utils.util_log import test_log as log
 from datetime import datetime
-from utils.util_k8s import wait_pods_ready, get_milvus_instance_name, get_milvus_deploy_tool
+from utils.util_k8s import wait_pods_ready, get_milvus_instance_name, get_milvus_deploy_tool, run_command
 from utils.util_common import update_key_value, update_key_name, gen_experiment_config, wait_signal_to_apply_chaos
 import constants
 
@@ -125,6 +125,9 @@ class TestChaosApply:
             res = chaos_res.list_all()
             chaos_list = [r['metadata']['name'] for r in res['items']]
         assert meta_name not in chaos_list
+        # show pod info
+        log.info("show pod info")
+        run_command(f"kubectl get pod -n {self.milvus_ns} -o wide|grep {release_name}")
         # wait all pods ready
         t0 = time.time()
         log.info(f"wait for pods in namespace {constants.CHAOS_NAMESPACE} with label app.kubernetes.io/instance={release_name}")

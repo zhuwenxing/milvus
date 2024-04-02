@@ -10,7 +10,16 @@ from common.milvus_sys import MilvusSys
 from utils.util_log import test_log as log
 from chaos import chaos_commons as cc
 from common.common_type import in_cluster_env
+import subprocess
 
+
+def run_command(cmd):
+    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = res.communicate()
+    output = stdout.decode("utf-8")
+    error = stderr.decode("utf-8")
+    log.info(f"{cmd}\n{output}\n{error}")
+    return output, error
 
 def init_k8s_client_config():
     """
@@ -78,7 +87,6 @@ def wait_pods_ready(namespace, label_selector, expected_num=None, timeout=360):
                 time.sleep(5)
         if all_pos_ready_flag:
             log.info(f"all pods in namespace {namespace} with label {label_selector} are ready")
-            log.info(f"pod status: {api_response.items}")
         else:
             log.info(f"timeout for waiting all pods in namespace {namespace} with label {label_selector} ready")
     except ApiException as e:
