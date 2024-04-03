@@ -235,7 +235,7 @@ class Op(Enum):
     unknown = 'unknown'
 
 
-timeout = 120
+timeout = 60
 search_timeout = 10
 query_timeout = 10
 
@@ -931,7 +931,7 @@ class UpsertChecker(Checker):
     def keep_running(self):
         while self._keep_running:
             self.run_task()
-            sleep(constants.WAIT_PER_OP * 6)
+            sleep(constants.WAIT_PER_OP / 10)
 
 
 class UpsertFreshnessChecker(Checker):
@@ -1363,14 +1363,17 @@ class DeleteChecker(Checker):
 
     @exception_handler()
     def run_task(self):
-        self.update_delete_expr()
+        try:
+            self.update_delete_expr()
+        except Exception as e:
+            log.error(f"Failed to update delete expr: {e}")
         res, result = self.delete_entities()
         return res, result
 
     def keep_running(self):
         while self._keep_running:
             self.run_task()
-            sleep(constants.WAIT_PER_OP)
+            sleep(constants.WAIT_PER_OP / 10)
 
 
 class DeleteFreshnessChecker(Checker):
