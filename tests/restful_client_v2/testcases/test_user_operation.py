@@ -101,6 +101,7 @@ class TestUserE2E(TestBase):
         rsp = self.user_client.user_grant(payload)
         # describe user roles
         rsp = self.user_client.user_describe(user_name)
+        rsp = self.role_client.role_describe(role_name)
 
         # test user has privilege with pymilvus
         uri = self.user_client.endpoint
