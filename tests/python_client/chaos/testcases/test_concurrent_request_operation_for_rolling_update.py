@@ -115,7 +115,7 @@ class TestOperations(TestBase):
             for k, v in self.health_checkers.items():
                 log.info(f"{k} rto: {v.get_rto()}")
                 rto = v.get_rto()
-                pytest.assume(rto < 30,  f"{k} rto expect 30s but get {rto}s")  # rto should be less than 30s
+                pytest.assume(rto <= 0,  f"{k} rto expect 0s but get {rto}s")  # rto should be less than 0s
 
             # if Op.insert in self.health_checkers:
             #     # verify the no insert data loss
