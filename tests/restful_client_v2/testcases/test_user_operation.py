@@ -1,3 +1,4 @@
+import time
 from utils.utils import gen_collection_name, gen_unique_str
 import pytest
 from base.testbase import TestBase
@@ -106,6 +107,8 @@ class TestUserE2E(TestBase):
         # test user has privilege with pymilvus
         uri = self.user_client.endpoint
         connections.connect(alias="test", uri=f"{uri}", token=f"{user_name}:{password}")
+        # wait 30s to make sure user has been updated
+        time.sleep(30)
 
         # create collection with user
         collection_name = gen_collection_name()
