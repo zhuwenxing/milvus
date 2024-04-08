@@ -41,4 +41,7 @@ extraConfigFiles:
         indexBasedCompaction: false
     indexCoord:
       scheduler:
-        interval: 100        
+        interval: 100
+    common:
+      security:
+        authorizationEnabled: true
