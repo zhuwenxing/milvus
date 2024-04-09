@@ -83,20 +83,21 @@ class TestOperations(TestBase):
                     bucket_name="milvus-bucket"
                 )
         ) as remote_writer:
-            for i in range(10*(10**6)):
+            for i in range(10**6):
                 row = cf.get_row_data_by_schema(nb=1, schema=schema)[0]
                 remote_writer.append_row(row)
             remote_writer.commit()
             batch_files = remote_writer.batch_files
         task_ids = []
-        for files in batch_files:
-            task_id = utility.do_bulk_insert(collection_name=collection_name, files=files)
-            task_ids.append(task_id)
-            log.info(f"Create a bulk inert task, task id: {task_id}")
+        for i in range(10):
+            for files in batch_files:
+                task_id = utility.do_bulk_insert(collection_name=collection_name, files=files)
+                task_ids.append(task_id)
+                log.info(f"Create a bulk inert task, task id: {task_id}")
 
         while len(task_ids) > 0:
-            log.info("Wait 1 second to check bulk insert tasks state...")
-            time.sleep(1)
+            log.info("Wait 30 second to check bulk insert tasks state...")
+            time.sleep(30)
             for id in task_ids:
                 state = utility.get_bulk_insert_state(task_id=id)
                 if state.state == BulkInsertState.ImportFailed or state.state == BulkInsertState.ImportFailedAndCleaned:
