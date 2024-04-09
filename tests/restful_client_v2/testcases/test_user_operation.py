@@ -5,7 +5,6 @@ from base.testbase import TestBase
 from pymilvus import (connections)
 
 
-
 class TestUserE2E(TestBase):
 
     def teardown_method(self):
