@@ -70,12 +70,14 @@ class TestOperations(TestBase):
                 v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
                 completed = False
                 retry_times = 0
-                while not completed and retry_times < 3:
-                    completed, result = v.do_bulk_insert()
-                    if not completed:
-                        log.info(f"do bulk insert failed: {result}")
-                        retry_times += 1
-                        sleep(5)
+                for i in range(10):
+                    while not completed and retry_times < 3:
+                        completed, result = v.do_bulk_insert()
+                        if not completed:
+                            log.info(f"do bulk insert failed: {result}")
+                            retry_times += 1
+                            sleep(5)
+                log.info(f"collection num_rows: {v.c_wrap.num_entities}")
                 # wait for index building complete
                 index_names = [x.index_name for x in v.c_wrap.indexes]
                 for index_name in index_names:
@@ -88,7 +90,7 @@ class TestOperations(TestBase):
                         res = utility.index_building_progress(v.c_name, index_name)
                         log.info(f"index building progress: {res}")
                         index_completed = res["pending_index_rows"] == 0
-                        if time.time() - t0 > 180:
+                        if time.time() - t0 > 720:
                             break
                     log.info(f"index building progress: {res}")
 
