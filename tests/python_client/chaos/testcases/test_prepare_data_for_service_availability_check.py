@@ -1,7 +1,11 @@
 import time
 import pytest
 from time import sleep
-from pymilvus import connections, utility
+from pymilvus import (
+    connections, list_collections,
+    FieldSchema, CollectionSchema, DataType,
+    Collection, RemoteBulkWriter, BulkInsertState, BulkFileType, utility
+)
 from chaos.checker import (
                            SearchChecker,
                            QueryChecker,
@@ -13,6 +17,7 @@ from common import common_func as cf
 from chaos.chaos_commons import assert_statistic
 from chaos import constants
 import random
+
 
 class TestBase:
     expect_create = constants.SUCC
@@ -64,44 +69,49 @@ class TestOperations(TestBase):
         self.init_health_checkers(collection_name=c_name)
         # prepare data by bulk insert
         log.info("*********************Prepare Data by bulk insert**********************")
-        for k, v in self.health_checkers.items():
-            if k in [Op.search, Op.query]:
-                log.info(f"prepare bulk insert data for {k}")
-                v.prepare_bulk_insert_data(minio_endpoint=self.minio_endpoint)
-                completed = False
-                retry_times = 0
-                for i in range(10):
-                    while not completed and retry_times < 3:
-                        completed, result = v.do_bulk_insert()
-                        if not completed:
-                            log.info(f"do bulk insert failed: {result}")
-                            retry_times += 1
-                            sleep(5)
-                log.info(f"collection num_rows: {v.c_wrap.num_entities}")
-                # wait for index building complete
-                index_names = [x.index_name for x in v.c_wrap.indexes]
-                for index_name in index_names:
-                    utility.wait_for_index_building_complete(v.c_name, index_name)
-                    res = utility.index_building_progress(v.c_name, index_name)
-                    index_completed = res["pending_index_rows"] == 0
-                    t0 = time.time()
-                    while not index_completed:
-                        time.sleep(10)
-                        res = utility.index_building_progress(v.c_name, index_name)
-                        log.info(f"index building progress: {res}")
-                        index_completed = res["pending_index_rows"] == 0
-                        if time.time() - t0 > 720:
-                            break
-                    log.info(f"index building progress: {res}")
+        schema = self.health_checkers[Op.search].schema
+        collection_name = c_name
+        c = Collection(collection_name)
+        with RemoteBulkWriter(
+                schema=schema,
+                file_type=BulkFileType.NUMPY,
+                remote_path="bulk_data",
+                connect_param=RemoteBulkWriter.ConnectParam(
+                    endpoint=self.minio_endpoint,
+                    access_key="minioadmin",
+                    secret_key="minioadmin",
+                    bucket_name="milvus-bucket"
+                )
+        ) as remote_writer:
+            for i in range(10*(10**6)):
+                row = cf.get_row_data_by_schema(nb=1, schema=schema)[0]
+                remote_writer.append_row(row)
+            remote_writer.commit()
+            batch_files = remote_writer.batch_files
+        task_ids = []
+        for files in batch_files:
+            task_id = utility.do_bulk_insert(collection_name=collection_name, files=files)
+            task_ids.append(task_id)
+            log.info(f"Create a bulk inert task, task id: {task_id}")
 
+        while len(task_ids) > 0:
+            log.info("Wait 1 second to check bulk insert tasks state...")
+            time.sleep(1)
+            for id in task_ids:
+                state = utility.get_bulk_insert_state(task_id=id)
+                if state.state == BulkInsertState.ImportFailed or state.state == BulkInsertState.ImportFailedAndCleaned:
+                    log.info(f"The task {state.task_id} failed, reason: {state.failed_reason}")
+                    task_ids.remove(id)
+                elif state.state == BulkInsertState.ImportCompleted:
+                    log.info(f"The task {state.task_id} completed with state {state}")
+                    task_ids.remove(id)
+
+        log.info(f"inserted vectors: {c.num_entities}")
         log.info("*********************Load Start**********************")
         cc.start_monitor_threads(self.health_checkers)
 
         # wait request_duration
-        request_duration = request_duration.replace("h", "*3600+").replace("m", "*60+").replace("s", "")
-        if request_duration[-1] == "+":
-            request_duration = request_duration[:-1]
-        request_duration = eval(request_duration)
+        request_duration = 120
         for i in range(10):
             sleep(request_duration // 10)
             for k, v in self.health_checkers.items():
