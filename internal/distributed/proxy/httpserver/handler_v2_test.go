@@ -446,8 +446,8 @@ func TestCreateCollection(t *testing.T) {
             "fields": [
                 {"fieldName": "book_id", "dataType": "Int64", "isPrimary": true, "elementTypeParams": {}},
                 {"fieldName": "word_count", "dataType": "Int64", "isPartitionKey": false, "elementTypeParams": {}},
-                {"fieldName": "partition_field", "dataType": "VarChar", "isPartitionKey": true, "elementTypeParams": {"max_length": "256"}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "partition_field", "dataType": "VarChar", "isPartitionKey": true, "elementTypeParams": {"max_length": 256}},
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }, "params": {"partitionsNum": "32"}}`),
 	})
@@ -457,7 +457,7 @@ func TestCreateCollection(t *testing.T) {
             "fields": [
                 {"fieldName": "book_id", "dataType": "Int64", "isPrimary": true, "elementTypeParams": {}},
                 {"fieldName": "word_count", "dataType": "Int64", "elementTypeParams": {}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }, "indexParams": [{"fieldName": "book_intro", "indexName": "book_intro_vector", "metricType": "L2"}]}`),
 	})
@@ -467,7 +467,7 @@ func TestCreateCollection(t *testing.T) {
             "fields": [
                 {"fieldName": "book_id", "dataType": "int64", "isPrimary": true, "elementTypeParams": {}},
                 {"fieldName": "word_count", "dataType": "Int64", "elementTypeParams": {}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }}`),
 		errMsg:  "invalid parameter, data type int64 is invalid(case sensitive).",
@@ -478,8 +478,8 @@ func TestCreateCollection(t *testing.T) {
 		requestBody: []byte(`{"collectionName": "` + DefaultCollectionName + `", "schema": {
             "fields": [
                 {"fieldName": "book_id", "dataType": "Int64", "isPrimary": true, "elementTypeParams": {}},
-                {"fieldName": "word_count", "dataType": "Array", "elementDataType": "Int64", "elementTypeParams": {"max_capacity": "2"}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "word_count", "dataType": "Array", "elementDataType": "Int64", "elementTypeParams": {"max_capacity": 2}},
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }}`),
 	})
@@ -489,7 +489,7 @@ func TestCreateCollection(t *testing.T) {
             "fields": [
                 {"fieldName": "book_id", "dataType": "Int64", "isPrimary": true, "elementTypeParams": {}},
                 {"fieldName": "word_count", "dataType": "Array", "elementDataType": "int64", "elementTypeParams": {}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }}`),
 		errMsg:  "invalid parameter, element data type int64 is invalid(case sensitive).",
@@ -501,7 +501,7 @@ func TestCreateCollection(t *testing.T) {
             "fields": [
                 {"fieldName": "book_id", "dataType": "Int64", "isPrimary": true, "elementTypeParams": {}},
                 {"fieldName": "word_count", "dataType": "Int64", "elementTypeParams": {}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }, "indexParams": [{"fieldName": "book_xxx", "indexName": "book_intro_vector", "metricType": "L2"}]}`),
 		errMsg:  "missing required parameters, error: `book_xxx` hasn't defined in schema",
@@ -519,7 +519,7 @@ func TestCreateCollection(t *testing.T) {
             "fields": [
                 {"fieldName": "book_id", "dataType": "Int64", "isPrimary": true, "elementTypeParams": {}},
                 {"fieldName": "word_count", "dataType": "Int64", "elementTypeParams": {}},
-                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}
+                {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}
             ]
         }, "indexParams": [{"fieldName": "book_intro", "indexName": "book_intro_vector", "metricType": "L2"}]}`),
 		errMsg:  "",
@@ -993,8 +993,8 @@ func TestMethodPost(t *testing.T) {
 			bodyReader := bytes.NewReader([]byte(`{` +
 				`"collectionName": "` + DefaultCollectionName + `", "newCollectionName": "test", "newDbName": "",` +
 				`"partitionName": "` + DefaultPartitionName + `", "partitionNames": ["` + DefaultPartitionName + `"],` +
-				`"schema": {"fields": [{"fieldName": "book_id", "dataType": "Int64", "elementTypeParams": {}}, {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": "2"}}]},` +
-				`"indexParams": [{"indexName": "` + DefaultIndexName + `", "fieldName": "book_intro", "metricType": "L2", "indexConfig": {"nlist": "30", "index_type": "IVF_FLAT"}}],` +
+				`"schema": {"fields": [{"fieldName": "book_id", "dataType": "Int64", "elementTypeParams": {}}, {"fieldName": "book_intro", "dataType": "FloatVector", "elementTypeParams": {"dim": 2}}]},` +
+				`"indexParams": [{"indexName": "` + DefaultIndexName + `", "fieldName": "book_intro", "metricType": "L2", "params": {"nlist": 30, "index_type": "IVF_FLAT"}}],` +
 				`"userName": "` + util.UserRoot + `", "password": "Milvus", "newPassword": "milvus", "roleName": "` + util.RoleAdmin + `",` +
 				`"roleName": "` + util.RoleAdmin + `", "objectType": "Global", "objectName": "*", "privilege": "*",` +
 				`"aliasName": "` + DefaultAliasName + `",` +
