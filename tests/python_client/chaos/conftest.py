@@ -13,7 +13,7 @@ def pytest_addoption(parser):
     parser.addoption("--is_check", action="store", type=bool, default=False, help="is_check")
     parser.addoption("--wait_signal", action="store", type=bool, default=True, help="wait_signal")
     parser.addoption("--collection_num", action="store", default="1", help="collection_num")
-    parser.addoption("--data_size", action="store",type=int, default=1000000, help="data_size")
+    parser.addoption("--data_size", action="store",type=int, default=100000, help="data_size")
 
 
 @pytest.fixture
