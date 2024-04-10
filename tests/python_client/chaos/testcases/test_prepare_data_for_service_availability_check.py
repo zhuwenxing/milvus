@@ -61,7 +61,7 @@ class TestOperations(TestBase):
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration):
+    def test_operations(self, data_size):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
@@ -72,6 +72,8 @@ class TestOperations(TestBase):
         schema = self.health_checkers[Op.search].schema
         collection_name = c_name
         c = Collection(collection_name)
+        batch_size = 100000
+        batch_num = data_size // batch_size
         with RemoteBulkWriter(
                 schema=schema,
                 file_type=BulkFileType.NUMPY,
@@ -83,13 +85,13 @@ class TestOperations(TestBase):
                     bucket_name="milvus-bucket"
                 )
         ) as remote_writer:
-            for i in range(10**6):
+            for i in range(batch_size):
                 row = cf.get_row_data_by_schema(nb=1, schema=schema)[0]
                 remote_writer.append_row(row)
             remote_writer.commit()
             batch_files = remote_writer.batch_files
         task_ids = []
-        for i in range(10):
+        for i in range(batch_num):
             for files in batch_files:
                 task_id = utility.do_bulk_insert(collection_name=collection_name, files=files)
                 task_ids.append(task_id)
