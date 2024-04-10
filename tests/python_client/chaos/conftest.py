@@ -13,6 +13,7 @@ def pytest_addoption(parser):
     parser.addoption("--is_check", action="store", type=bool, default=False, help="is_check")
     parser.addoption("--wait_signal", action="store", type=bool, default=True, help="wait_signal")
     parser.addoption("--collection_num", action="store", default="1", help="collection_num")
+    parser.addoption("--data_size", action="store",type=int, default=1000000, help="data_size")
 
 
 @pytest.fixture
@@ -68,3 +69,8 @@ def is_check(request):
 @pytest.fixture
 def wait_signal(request):
     return request.config.getoption("--wait_signal")
+
+
+@pytest.fixture
+def data_size(request):
+    return request.config.getoption("--data_size")
