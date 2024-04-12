@@ -1332,14 +1332,8 @@ class DeleteChecker(Checker):
                                                check_task=CheckTasks.check_nothing)
         self.c_wrap.load()  # load before query
         self.insert_data()
-        query_expr = f'{self.int64_field_name} > 0'
-        res, _ = self.c_wrap.query(query_expr,
-                                   output_fields=[self.int64_field_name],
-                                   partition_name=self.p_name)
-        self.ids = [r[self.int64_field_name] for r in res]
-        self.query_expr = query_expr
-        delete_ids = self.ids[:len(self.ids) // 2]  # delete half of ids
-        self.delete_expr = f'{self.int64_field_name} in {delete_ids}'
+        self.query_expr = f'{self.int64_field_name} > 0'
+        self.delete_expr = f'{self.int64_field_name} < 3000'
 
     def update_delete_expr(self):
         res, _ = self.c_wrap.query(self.query_expr,
@@ -1367,6 +1361,7 @@ class DeleteChecker(Checker):
             self.update_delete_expr()
         except Exception as e:
             log.error(f"Failed to update delete expr: {e}")
+            self.delete_expr = f'{self.int64_field_name} < 3000'
         res, result = self.delete_entities()
         return res, result
 
