@@ -940,7 +940,7 @@ class UpsertChecker(Checker):
     def keep_running(self):
         while self._keep_running:
             self.run_task()
-            sleep(constants.WAIT_PER_OP / 10)
+            sleep(constants.WAIT_PER_OP * 10)
 
 
 class UpsertFreshnessChecker(Checker):
@@ -1377,7 +1377,7 @@ class DeleteChecker(Checker):
     def keep_running(self):
         while self._keep_running:
             self.run_task()
-            sleep(constants.WAIT_PER_OP / 10)
+            sleep(constants.WAIT_PER_OP * 10)
 
 
 class DeleteFreshnessChecker(Checker):
