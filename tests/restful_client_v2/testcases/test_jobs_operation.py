@@ -13,8 +13,8 @@ import pytest
 from base.testbase import TestBase
 from uuid import uuid4
 
-IMPORT_TIMEOUT = 360
 
+IMPORT_TIMEOUT = 360
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
