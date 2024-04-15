@@ -11,9 +11,6 @@ image:
     pullPolicy: IfNotPresent
 standalone:
   resources:
-    limits:
-      cpu: 8
-      memory: 16Gi
     requests:
       cpu: 4
       memory: 8Gi
@@ -28,9 +25,8 @@ etcd:
   replicaCount: 3
   image:
     repository: milvusdb/etcd
-    tag: 3.5.5-r2  
+    tag: 3.5.5-r2
 minio:
   mode: standalone
 pulsar:
   enabled: false
-     
