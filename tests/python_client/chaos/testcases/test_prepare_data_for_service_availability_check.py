@@ -16,6 +16,7 @@ from common.common_type import CaseLabel
 from common import common_func as cf
 from chaos.chaos_commons import assert_statistic
 from chaos import constants
+from common.milvus_sys import MilvusSys
 import random
 
 
@@ -49,6 +50,8 @@ class TestOperations(TestBase):
         self.user = user
         self.password = password
         self.minio_endpoint = f"{minio_host}:9000"
+        self.ms = MilvusSys()
+        self.bucket_name = self.ms.index_nodes[0]["infos"]["system_configurations"]["minio_bucket_name"]
 
     def init_health_checkers(self, collection_name=None):
 
@@ -82,7 +85,7 @@ class TestOperations(TestBase):
                     endpoint=self.minio_endpoint,
                     access_key="minioadmin",
                     secret_key="minioadmin",
-                    bucket_name="milvus-bucket"
+                    bucket_name=self.bucket_name
                 )
         ) as remote_writer:
             for i in range(batch_size):
