@@ -5,8 +5,9 @@ from pymilvus import DataType
 from pathlib import Path
 from base.client_base import TestcaseBase
 from common import common_func as cf
+from common import common_type as ct
 from common.milvus_sys import MilvusSys
-from common.common_type import CaseLabel
+from common.common_type import CaseLabel, CheckTasks
 from utils.util_log import test_log as log
 from common.bulk_insert_data import (
     prepare_bulk_insert_new_json_files,
@@ -124,6 +125,33 @@ class TestBulkInsertPerf(TestcaseBaseBulkInsert):
         tt = time.time() - t0
         log.info(f"bulk insert state:{success} in {tt} with states:{states}")
         assert success
+        # create index load and search
+        index_params = ct.default_index
+        self.collection_wrap.create_index(
+            field_name=df.vec_field, index_params=index_params
+        )
+        self.collection_wrap.load()
+        log.info(f"wait for load finished and be ready for search")
+        time.sleep(10)
+        log.info(
+            f"query seg info: {self.utility_wrap.get_query_segment_info(c_name)[0]}"
+        )
+        nq = 2
+        topk = 2
+        search_data = cf.gen_vectors(nq, dim)
+        search_params = ct.default_search_params
+        res, _ = self.collection_wrap.search(
+            search_data,
+            df.vec_field,
+            param=search_params,
+            limit=topk,
+            check_task=CheckTasks.check_search_results,
+            check_items={"nq": nq, "limit": topk},
+        )
+        for hits in res:
+            ids = hits.ids
+            results, _ = self.collection_wrap.query(expr=f"{df.pk_field} in {ids}")
+            assert len(results) == len(ids)
 
     @pytest.mark.tags(CaseLabel.L3)
     @pytest.mark.parametrize("auto_id", [True])
