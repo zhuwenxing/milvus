@@ -11,6 +11,7 @@ from chaos.checker import (CreateChecker,
                            QueryChecker,
                            IndexChecker,
                            DeleteChecker,
+                           BulkInsertChecker,
                            Op)
 from utils.util_k8s import wait_pods_ready
 from utils.util_log import test_log as log
@@ -61,8 +62,13 @@ class TestOperations(TestBase):
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
             Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
+            Op.bulk_insert: BulkInsertChecker(collection_name=c_name, schema=schema)
         }
         self.health_checkers = checkers
+        for k, v in self.health_checkers.items():
+            if k in [Op.bulk_insert]:
+                files = v.prepare_bulk_insert_data(nb=3000, minio_endpoint=self.minio_endpoint)
+                v.update(files=files)
 
     @pytest.mark.tags(CaseLabel.L3)
     def test_operations(self, request_duration, is_check, prepare_data):
@@ -92,7 +98,7 @@ class TestOperations(TestBase):
             log.info(f"{k} failed request: {v.fail_records}")
         for k, v in self.health_checkers.items():
             log.info(f"{k} rto: {v.get_rto()}")
-        
+
         # save result to parquet use pandas
         result  = []
         for k, v in self.health_checkers.items():
