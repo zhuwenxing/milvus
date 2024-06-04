@@ -215,6 +215,7 @@ def gen_vector(datatype="float_vector", dim=128, binary_data=False):
         if binary_data:
             return value
         else:
+            # for the binary/float16/bfloat16 vector, we need to encode it to base64 for json
             data = base64.b64encode(value).decode("utf-8")
             return data
 

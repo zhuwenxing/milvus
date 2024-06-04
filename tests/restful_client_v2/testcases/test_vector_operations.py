@@ -1762,6 +1762,10 @@ class TestQueryVector(TestBase):
         rsp = self.vector_client.vector_query({"collectionName": name, "filter": "user_id > 0", "limit": 50})
         assert rsp['code'] == 0
         assert len(rsp['data']) == 50
+        # verify the data is correct
+
+
+
 
     @pytest.mark.parametrize("expr", ["10+20 <= uid < 20+30", "uid in [1,2,3,4]",
                                       "uid > 0", "uid >= 0", "uid > 0",
