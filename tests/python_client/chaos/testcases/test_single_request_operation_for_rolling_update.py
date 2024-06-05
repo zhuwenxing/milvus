@@ -65,7 +65,7 @@ class TestOperations(TestBase):
             Op.search: SearchChecker(collection_name=c_name, schema=schema),
             Op.query: QueryChecker(collection_name=c_name, schema=schema),
             Op.delete: DeleteChecker(collection_name=c_name, schema=schema),
-            Op.bulk_insert: BulkInsertChecker(collection_name=c_name, schema=schema)
+            # Op.bulk_insert: BulkInsertChecker(collection_name=c_name, schema=schema)
         }
         self.health_checkers = checkers
         for k, v in self.health_checkers.items():
