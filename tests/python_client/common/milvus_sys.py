@@ -24,7 +24,7 @@ class MilvusSys:
         # req = milvus_types.GetMetricsRequest(request=sys_logs_req)
         # self.sys_logs = self.handler._stub.GetMetrics(req, wait_for_ready=True, timeout=None)
         self.sys_info = self.handler._stub.GetMetrics(req, wait_for_ready=True, timeout=60)
-        log.debug(f"sys_info: {self.sys_info}")
+        # log.debug(f"sys_info: {self.sys_info}")
 
     def refresh(self):
         req = milvus_types.GetMetricsRequest(request=sys_info_req)
@@ -33,7 +33,7 @@ class MilvusSys:
         # self.sys_statistics = self.handler._stub.GetMetrics(req, wait_for_ready=True, timeout=None)
         # req = milvus_types.GetMetricsRequest(request=sys_logs_req)
         # self.sys_logs = self.handler._stub.GetMetrics(req, wait_for_ready=True, timeout=None)
-        log.debug(f"sys info response: {self.sys_info.response}")
+        # log.debug(f"sys info response: {self.sys_info.response}")
 
 
     @property

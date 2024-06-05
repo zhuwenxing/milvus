@@ -38,7 +38,7 @@ def display_segment_distribution_info(collection_name, release_name, segment_inf
     table.add_column("Node ID", style="cyan")
     table.add_column("Node Name", style="cyan")
     res = utility.get_query_segment_info(collection_name)
-    log.info(f"segment info: {res}")
+    # log.info(f"segment info: {res}")
     label = f"app.kubernetes.io/instance={release_name}, app.kubernetes.io/component=querynode"
     querynode_id_pod_pair = get_querynode_id_pod_pairs("chaos-testing", label)
     for r in res:
