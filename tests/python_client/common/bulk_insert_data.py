@@ -618,10 +618,18 @@ def gen_json_files(is_row_based, rows, dim, auto_id, str_pk,
 
 
 def gen_dict_data_by_data_field(data_fields, rows, start=0, float_vector=True, dim=128, array_length=None, enable_dynamic_field=False, **kwargs):
+    schema = kwargs.get("schema", None)
+    schema = schema.to_dict() if schema is not None else None
+    fields = schema["fields"]
     data = []
     for r in range(rows):
         d = {}
         for data_field in data_fields:
+            for field in fields:
+                if data_field == field["name"] and "params" in field:
+                    dim = field["params"].get("dim", dim)
+                    array_length = field["params"].get("max_length", array_length)
+
             if "vec" in data_field:
                 if "float" in data_field:
                     float_vector = True
