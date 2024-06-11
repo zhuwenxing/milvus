@@ -26,11 +26,9 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", partition
         Collection(name=collection_name).drop()
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-        FieldSchema(name="scalar_3", dtype=DataType.VARCHAR, max_length=1000, is_partition_key=bool(partition_key == "scalar_3")),
-        FieldSchema(name="scalar_6", dtype=DataType.VARCHAR, max_length=1000, is_partition_key=bool(partition_key == "scalar_6")),
-        FieldSchema(name="scalar_9", dtype=DataType.VARCHAR, max_length=1000, is_partition_key=bool(partition_key == "scalar_9")),
-        FieldSchema(name="scalar_12", dtype=DataType.VARCHAR, max_length=1000, is_partition_key=bool(partition_key == "scalar_12")),
-        FieldSchema(name="scalar_5_linear", dtype=DataType.VARCHAR, max_length=1000, is_partition_key=bool(partition_key == "scalar_5_linear")),
+        FieldSchema(name="int_array", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+        FieldSchema(name="varchar_array", dtype=DataType.ARRAY, element_type=DataType.VARCHAR,max_length=100, max_capacity=2000),
+        FieldSchema(name="bool_array", dtype=DataType.ARRAY,element_type=DataType.BOOL, max_capacity=2000),
         FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=768)
     ]
     schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
@@ -38,6 +36,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", partition
     collection = Collection(name=collection_name, schema=schema)
     index_params = {"metric_type": "L2", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
     logger.info(f"collection {collection_name} created")
+
     batch_files = glob.glob("/root/dataset/laion_with_scalar_medium_10m/train*.parquet")
     logger.info(f"files {batch_files}")
     # copy file to minio
@@ -89,6 +88,5 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="10.255.136.47")
     parser.add_argument("--minio_host", type=str, default="10.255.117.95")
     parser.add_argument("--port", type=int, default=19530)
-    parser.add_argument("--partition_key", type=str, default="scalar_3")
     args = parser.parse_args()
-    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, partition_key=args.partition_key)
+    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host)
