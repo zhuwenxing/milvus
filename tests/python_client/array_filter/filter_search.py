@@ -25,37 +25,12 @@ def _(environment, **kw):
 
 class MilvusUser(HttpUser):
     host = "http://10.104.13.233:19530"
-    test_data_file_name = "/root/dataset/laion_with_scalar_medium_10m/test.parquet"
-    df = pd.read_parquet(test_data_file_name)
-    vectors_to_search = df["emb"].tolist()
-    recall_list = []
-    ts_list = []
-    recall = 0
-
-    def on_start(self):
-        # print("X. Here's where you would put things you want to run the first time a User is started")
-        filter_field = self.environment.parsed_options.filter_field
-        expr = f"{self.environment.parsed_options.filter_field} {self.environment.parsed_options.filter_op} {self.environment.parsed_options.filter_value}"
-        ascii_codes = [str(ord(char)) for char in expr]
-        expr_ascii = "".join(ascii_codes)
-        if filter_field:
-            ground_truth_file_name = f"/root/dataset/laion_with_scalar_medium_10m/neighbors-{expr_ascii}.parquet"
-        else:
-            ground_truth_file_name = f"/root/dataset/laion_with_scalar_medium_10m/neighbors.parquet"
-        df_neighbors = pd.read_parquet(ground_truth_file_name)
-        self.gt = df_neighbors["neighbors_id"].tolist()
 
     @task
     def search(self):
-        filter =f"{self.environment.parsed_options.filter_field} {self.environment.parsed_options.filter_op} '{self.environment.parsed_options.filter_value}'"
-        # print(filter)
-        random_id = random.randint(0, len(self.vectors_to_search) - 1)
-        # print([self.vectors_to_search[random_id].tolist()])
-        data = [self.vectors_to_search[random_id].tolist()]
-        with self.client.post("/v2/vectordb/entities/search",
+        filter = f"{self.environment.parsed_options.filter_field} {self.environment.parsed_options.filter_op} '{self.environment.parsed_options.filter_value}'"
+        with self.client.post("/v2/vectordb/entities/query",
                               json={"collectionName": "test_restful_perf",
-                                    "annsField": "emb",
-                                    "data": data,
                                     "outputFields": ["id"],
                                     "filter": filter,
                                     "limit": 1000
@@ -64,27 +39,7 @@ class MilvusUser(HttpUser):
                               catch_response=True
                               ) as resp:
             if resp.status_code != 200 or resp.json()["code"] != 0:
-                resp.failure(f"search failed with error {resp.text}")
-            else:
-                # compute recall
-                result_ids = [item["id"] for item in resp.json()["data"]]
-                true_ids = [item for item in self.gt[random_id]]
-                tmp = set(true_ids).intersection(set(result_ids))
-                self.recall = len(tmp) / len(result_ids)
-                self.recall_list.append(self.recall)
-                cur_time = datetime.now().timestamp()
-                self.ts_list.append(cur_time)
-
-    def on_stop(self):
-        filter = f"{self.environment.parsed_options.filter_field}-eq-{self.environment.parsed_options.filter_value}"
-        # this is a good place to clean up/release any user-specific test data
-        print(f"current recall is {self.recall}, "
-              f"avg recall is {sum(self.recall_list) / len(self.recall_list)}, "
-              f"max recall is {max(self.recall_list)}, "
-              f"min recall is {min(self.recall_list)}")
-        data = {"ts": self.ts_list, "recall": self.recall_list}
-        df = pd.DataFrame(data)
-        df.to_parquet(f"/tmp/ci_logs/recall-of-{filter}-{uuid.uuid4()}.parquet", index=False)
+                resp.failure(f"query failed with error {resp.text}")
 
 class StagesShape(LoadTestShape):
     """

@@ -10,11 +10,11 @@ import time
 import argparse
 from loguru import logger
 import faker
-
+import polars as pl
 fake = faker.Faker()
 
 
-def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", partition_key="scalar_3"):
+def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1"):
 
     connections.connect(
         host=host,
@@ -29,7 +29,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", partition
         FieldSchema(name="int_array", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
         FieldSchema(name="varchar_array", dtype=DataType.ARRAY, element_type=DataType.VARCHAR,max_length=100, max_capacity=2000),
         FieldSchema(name="bool_array", dtype=DataType.ARRAY,element_type=DataType.BOOL, max_capacity=2000),
-        FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=768)
+        FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=128)
     ]
     schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
     logger.info(schema)
@@ -37,7 +37,9 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", partition
     index_params = {"metric_type": "L2", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
     logger.info(f"collection {collection_name} created")
 
-    batch_files = glob.glob("/root/dataset/laion_with_scalar_medium_10m/train*.parquet")
+    batch_files = glob.glob("/Users/zilliz/workspace/milvus/tests/python_client/array_filter/*.parquet")
+    df = pl.read_parquet(batch_files[0])
+    print(df)
     logger.info(f"files {batch_files}")
     # copy file to minio
     client = Minio(
@@ -85,8 +87,8 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", partition
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare data for perf test")
-    parser.add_argument("--host", type=str, default="10.255.136.47")
-    parser.add_argument("--minio_host", type=str, default="10.255.117.95")
+    parser.add_argument("--host", type=str, default="10.104.15.106")
+    parser.add_argument("--minio_host", type=str, default="10.104.18.168")
     parser.add_argument("--port", type=int, default=19530)
     args = parser.parse_args()
     prepare_data(host=args.host, port=args.port, minio_host=args.minio_host)
