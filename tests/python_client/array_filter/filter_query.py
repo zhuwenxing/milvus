@@ -33,6 +33,7 @@ class MilvusUser(HttpUser):
         ground_truth_file_name = f"test.parquet"
         df = pd.read_parquet(ground_truth_file_name)
         data = df.query(f"filter == '{filter_op}'")
+        print(data)
         filter_value = data["value"][0].tolist()
         if filter_op == "contains":
             filter_value = filter_value[0]
