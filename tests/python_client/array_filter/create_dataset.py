@@ -1,7 +1,7 @@
 import random
 import pandas as pd
 import numpy as np
-
+import argparse
 
 def generate_dataset(size, array_length, hit_probabilities, target_values):
     dataset = []
@@ -39,7 +39,7 @@ def generate_dataset(size, array_length, hit_probabilities, target_values):
 
 def main(data_size):
     # Parameters
-    size = 100000  # Number of arrays in the dataset
+    size = data_size  # Number of arrays in the dataset
     array_length = 10  # Length of each array
 
     # Probabilities that an array hits the target condition
@@ -114,3 +114,11 @@ def main(data_size):
     df = pd.DataFrame(query_data)
     print(df)
     df.to_parquet("test.parquet")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_size", type=int, default=100000)
+    args = parser.parse_args()
+    datasize = args.data_size
+    main(datasize)
