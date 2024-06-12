@@ -9,9 +9,6 @@ from pymilvus import (
 import time
 import argparse
 from loguru import logger
-import faker
-import polars as pl
-fake = faker.Faker()
 
 
 def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1"):
