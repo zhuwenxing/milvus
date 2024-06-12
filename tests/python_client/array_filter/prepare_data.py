@@ -26,20 +26,18 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1"):
         Collection(name=collection_name).drop()
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-        FieldSchema(name="int_array", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
-        FieldSchema(name="varchar_array", dtype=DataType.ARRAY, element_type=DataType.VARCHAR,max_length=100, max_capacity=2000),
-        FieldSchema(name="bool_array", dtype=DataType.ARRAY,element_type=DataType.BOOL, max_capacity=2000),
-        FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=128)
+        FieldSchema(name="contains", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+        FieldSchema(name="contains_any", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+        FieldSchema(name="contains_all", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+        FieldSchema(name="equals", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+        FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=32)
     ]
     schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
     logger.info(schema)
     collection = Collection(name=collection_name, schema=schema)
     index_params = {"metric_type": "L2", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
     logger.info(f"collection {collection_name} created")
-
-    batch_files = glob.glob("/Users/zilliz/workspace/milvus/tests/python_client/array_filter/*.parquet")
-    # df = pl.read_parquet(batch_files[0])
-    # print(df)
+    batch_files = glob.glob("./train*.parquet")
     logger.info(f"files {batch_files}")
     # copy file to minio
     client = Minio(

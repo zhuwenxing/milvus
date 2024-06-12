@@ -11,28 +11,45 @@ def convert_numbers_to_quoted_strings(text):
 
 @events.init_command_line_parser.add_listener
 def _(parser):
-    parser.add_argument("--filter_field", type=str, env_var="LOCUST_FILTER", default="", help="filter field")
-    parser.add_argument("--filter_op", type=str, env_var="LOCUST_FILTER", default="==", help="filter op")
-    parser.add_argument("--filter_value", type=str, env_var="LOCUST_FILTER", default="0", help="filter value")
+    parser.add_argument("--filter_op", type=str, env_var="LOCUST_FILTER", default="contains", help="filter op")
 
 
 @events.test_start.add_listener
 def _(environment, **kw):
-    print(f"Custom argument supplied: {environment.parsed_options.filter_field}")
     print(f"Custom argument supplied: {environment.parsed_options.filter_op}")
-    print(f"Custom argument supplied: {environment.parsed_options.filter_value}")
 
 
 class MilvusUser(HttpUser):
     host = "http://10.104.15.106:19530"
+    filter = ""
+    gt = []
+    recall_list = []
+    ts_list = []
+    recall = 0
 
+    def on_start(self):
+        # print("X. Here's where you would put things you want to run the first time a User is started")
+        filter_op = self.environment.parsed_options.filter_op
+        ground_truth_file_name = f"test.parquet"
+        df = pd.read_parquet(ground_truth_file_name)
+        data = df.query(f"filter == '{filter_op}'")
+        filter_value = data["value"][0].tolist()
+        if filter_op == "contains":
+            filter_value = filter_value[0]
+            self.filter = f"array_contains({filter_op}, {filter_value})"
+        if filter_op == "contains_any":
+            self.filter = f"array_contains_any({filter_op}, {filter_value})"
+        if filter_op == "contains_all":
+            self.filter = f"array_contains_all({filter_op}, {filter_value})"
+        if filter_op == "equals":
+            self.filter = f"{filter_op} == {filter_value}"
+        self.gt = data["target_id"][0].tolist()
     @task
     def search(self):
-        filter = f"{self.environment.parsed_options.filter_field} {self.environment.parsed_options.filter_op} '{self.environment.parsed_options.filter_value}'"
         with self.client.post("/v2/vectordb/entities/query",
                               json={"collectionName": "test_restful_perf",
                                     "outputFields": ["id"],
-                                    "filter": "ARRAY_CONTAINS(int_array, 10)",
+                                    "filter": self.filter,
                                     "limit": 1000
                                     },
                               headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},
@@ -40,6 +57,26 @@ class MilvusUser(HttpUser):
                               ) as resp:
             if resp.status_code != 200 or resp.json()["code"] != 0:
                 resp.failure(f"query failed with error {resp.text}")
+            else:
+                # compute recall
+                result_ids = [item["id"] for item in resp.json()["data"]]
+                true_ids = [item for item in self.gt]
+                tmp = set(true_ids).intersection(set(result_ids))
+                self.recall = len(tmp) / len(result_ids)
+                # print(f"recall: {self.recall}")
+                self.recall_list.append(self.recall)
+                cur_time = datetime.now().timestamp()
+                self.ts_list.append(cur_time)
+
+    def on_stop(self):
+        # this is a good place to clean up/release any user-specific test data
+        print(f"current recall is {self.recall}, "
+              f"avg recall is {sum(self.recall_list) / len(self.recall_list)}, "
+              f"max recall is {max(self.recall_list)}, "
+              f"min recall is {min(self.recall_list)}")
+        data = {"ts": self.ts_list, "recall": self.recall_list}
+        df = pd.DataFrame(data)
+        print(df)
 
 class StagesShape(LoadTestShape):
     """
@@ -59,8 +96,7 @@ class StagesShape(LoadTestShape):
 
     stages = [
         {"duration": 60, "users": 50, "spawn_rate": 10},
-        {"duration": 120, "users": 50, "spawn_rate": 10},
-        {"duration": 240, "users": 50, "spawn_rate": 10, "stop": True},
+        {"duration": 120, "users": 50, "spawn_rate": 10, "stop": True},
     ]
 
     def tick(self):

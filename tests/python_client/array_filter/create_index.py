@@ -22,7 +22,8 @@ def prepare_data(host="127.0.0.1", port=19530):
     collection_name = "test_restful_perf"
     collection = Collection(name=collection_name)
     collection.release()
-    for f in ["int_array", "varchar_array", "bool_array"]:
+
+    for f in ["contains", "contains_any", "contains_all", "equals"]:
         collection.create_index(f, {"index_type": "INVERTED"})
     index_list = utility.list_indexes(collection_name=collection_name)
     for index_name in index_list:

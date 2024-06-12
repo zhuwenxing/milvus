@@ -1,35 +1,116 @@
 import random
-
-import numpy as np
 import pandas as pd
-import polars as pl
+import numpy as np
 
 
-def create_dataset(data_size: int, dimension: int, file_name: str):
-    batch_size = 100000
-    array_len = 100
-    epoch = data_size // batch_size
-    remain = data_size % batch_size
-    for i in range(epoch):
-        data = {
-            "id": pd.Series([np.int64(x) for x in range(i * batch_size, (i + 1) * batch_size)]),
-            "int_array": pd.Series(
-                [np.array([random.randint(0, 200) for j in range(array_len)], dtype=np.dtype("int64")) for _ in
-                 range(batch_size)]),
-            "varchar_array": pd.Series(
-                [np.array([str(random.randint(0, 200)) for j in range(array_len)], dtype=np.dtype("str")) for _ in
-                 range(batch_size)]),
-            "bool_array": pd.Series(
-                [np.array([random.choice([True, False]) for j in range(array_len)], dtype=np.dtype("bool")) for _ in
-                 range(batch_size)]),
-            "emb": pd.Series([np.array([random.random() for j in range(dimension)], dtype=np.dtype("float32")) for _ in
-                              range(batch_size)])
-        }
+def generate_dataset(size, array_length, hit_probabilities, target_values):
+    dataset = []
+    all_target_values = set(
+        val for sublist in target_values.values() for val in (sublist if isinstance(sublist, list) else [sublist]))
+    for i in range(size):
+        entry = {"id": i}
 
-        df = pd.DataFrame(data)
-        # df = pl.DataFrame(df)
-        df.to_parquet(file_name + f"_{i}.parquet")
+        # Generate random arrays for each condition
+        for condition in hit_probabilities.keys():
+            available_values = [val for val in range(1, 100) if val not in all_target_values]
+            array = random.sample(available_values, array_length)
+
+            # Ensure the array meets the condition based on its probability
+            if random.random() < hit_probabilities[condition]:
+                if condition == 'contains':
+                    if target_values[condition] not in array:
+                        array[random.randint(0, array_length - 1)] = target_values[condition]
+                elif condition == 'contains_any':
+                    if not any(val in array for val in target_values[condition]):
+                        array[random.randint(0, array_length - 1)] = random.choice(target_values[condition])
+                elif condition == 'contains_all':
+                    indices = random.sample(range(array_length), len(target_values[condition]))
+                    for idx, val in zip(indices, target_values[condition]):
+                        array[idx] = val
+                elif condition == 'equals':
+                    array = target_values[condition][:]
+
+            entry[condition] = array
+
+        dataset.append(entry)
+
+    return dataset
 
 
-if __name__ == "__main__":
-    create_dataset(100000, 128, "array_test")
+def main(data_size):
+    # Parameters
+    size = 100000  # Number of arrays in the dataset
+    array_length = 10  # Length of each array
+
+    # Probabilities that an array hits the target condition
+    hit_probabilities = {
+        'contains': 0.005,
+        'contains_any': 0.005,
+        'contains_all': 0.005,
+        'equals': 0.005
+    }
+
+    # Target values for each condition
+    target_values = {
+        'contains': 42,
+        'contains_any': [21, 37, 42],
+        'contains_all': [15, 30],
+        'equals': [x for x in range(array_length)]
+    }
+
+    # Generate dataset
+    dataset = generate_dataset(size, array_length, hit_probabilities, target_values)
+
+    # Define testing conditions
+    contains_value = target_values['contains']
+    contains_any_values = target_values['contains_any']
+    contains_all_values = target_values['contains_all']
+    equals_array = target_values['equals']
+
+    # Perform tests
+    contains_result = [d for d in dataset if contains_value in d["contains"]]
+    contains_any_result = [d for d in dataset if any(val in d["contains_any"] for val in contains_any_values)]
+    contains_all_result = [d for d in dataset if all(val in d["contains_all"] for val in contains_all_values)]
+    equals_result = [d for d in dataset if d["equals"] == equals_array]
+
+    # Calculate and print proportions
+    contains_ratio = len(contains_result) / size
+    contains_any_ratio = len(contains_any_result) / size
+    contains_all_ratio = len(contains_all_result) / size
+    equals_ratio = len(equals_result) / size
+
+    print("\nProportion of arrays that contain the value:", contains_ratio)
+    print("Proportion of arrays that contain any of the values:", contains_any_ratio)
+    print("Proportion of arrays that contain all of the values:", contains_all_ratio)
+    print("Proportion of arrays that equal the target array:", equals_ratio)
+
+    data = {
+        "id": pd.Series([x["id"] for x in dataset]),
+        "contains": pd.Series([x["contains"] for x in dataset]),
+        "contains_any": pd.Series([x["contains_any"] for x in dataset]),
+        "contains_all": pd.Series([x["contains_all"] for x in dataset]),
+        "equals": pd.Series([x["equals"] for x in dataset]),
+        "emb": pd.Series([np.array([random.random() for j in range(32)], dtype=np.dtype("float32")) for _ in
+                          range(size)])
+    }
+
+    df = pd.DataFrame(data)
+    print(df)
+    df.to_parquet("train.parquet")
+
+    target_id = {
+        "contains": [r["id"] for r in contains_result],
+        "contains_any": [r["id"] for r in contains_any_result],
+        "contains_all": [r["id"] for r in contains_all_result],
+        "equals": [r["id"] for r in equals_result]
+    }
+    target_id_list = [target_id[key] for key in ["contains", "contains_any", "contains_all", "equals"]]
+
+    query_data = {
+        "filter": ["contains", "contains_any", "contains_all", "equals"],
+        "value": [[42], [21, 37, 42], [15, 30], [0, 1, 2, 3, 4]],
+        "target_id": target_id_list
+    }
+    df = pd.DataFrame(query_data)
+    print(df)
+    df.to_parquet("test.parquet")
