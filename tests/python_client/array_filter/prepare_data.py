@@ -38,8 +38,8 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1"):
     logger.info(f"collection {collection_name} created")
 
     batch_files = glob.glob("/Users/zilliz/workspace/milvus/tests/python_client/array_filter/*.parquet")
-    df = pl.read_parquet(batch_files[0])
-    print(df)
+    # df = pl.read_parquet(batch_files[0])
+    # print(df)
     logger.info(f"files {batch_files}")
     # copy file to minio
     client = Minio(

@@ -24,7 +24,7 @@ def _(environment, **kw):
 
 
 class MilvusUser(HttpUser):
-    host = "http://10.104.13.233:19530"
+    host = "http://10.104.15.106:19530"
 
     @task
     def search(self):
@@ -32,7 +32,7 @@ class MilvusUser(HttpUser):
         with self.client.post("/v2/vectordb/entities/query",
                               json={"collectionName": "test_restful_perf",
                                     "outputFields": ["id"],
-                                    "filter": filter,
+                                    "filter": "ARRAY_CONTAINS(int_array, 10)",
                                     "limit": 1000
                                     },
                               headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},
