@@ -33,8 +33,7 @@ class MilvusUser(HttpUser):
         ground_truth_file_name = f"test.parquet"
         df = pd.read_parquet(ground_truth_file_name)
         data = df.query(f"filter == '{filter_op}'")
-        print(data)
-        filter_value = data["value"][0].tolist()
+        filter_value = data["value"].tolist()[0].tolist()
         if filter_op == "contains":
             filter_value = filter_value[0]
             self.filter = f"array_contains({filter_op}, {filter_value})"
@@ -44,9 +43,9 @@ class MilvusUser(HttpUser):
             self.filter = f"array_contains_all({filter_op}, {filter_value})"
         if filter_op == "equals":
             self.filter = f"{filter_op} == {filter_value}"
-        self.gt = data["target_id"][0].tolist()
+        self.gt = data["target_id"].tolist()[0].tolist()
     @task
-    def search(self):
+    def query(self):
         with self.client.post("/v2/vectordb/entities/query",
                               json={"collectionName": "test_restful_perf",
                                     "outputFields": ["id"],
@@ -63,8 +62,8 @@ class MilvusUser(HttpUser):
                 result_ids = [item["id"] for item in resp.json()["data"]]
                 true_ids = [item for item in self.gt]
                 tmp = set(true_ids).intersection(set(result_ids))
-                self.recall = len(tmp) / len(result_ids)
-                # print(f"recall: {self.recall}")
+                self.recall = len(tmp) / len(result_ids) if len(result_ids) > 0 else 0
+                print(f"recall: {self.recall}")
                 self.recall_list.append(self.recall)
                 cur_time = datetime.now().timestamp()
                 self.ts_list.append(cur_time)
