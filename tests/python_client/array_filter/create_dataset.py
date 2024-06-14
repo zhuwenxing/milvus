@@ -37,17 +37,17 @@ def generate_dataset(size, array_length, hit_probabilities, target_values):
     return dataset
 
 
-def main(data_size):
+def main(data_size, hit_rate=0.005):
     # Parameters
     size = data_size  # Number of arrays in the dataset
     array_length = 10  # Length of each array
 
     # Probabilities that an array hits the target condition
     hit_probabilities = {
-        'contains': 0.005,
-        'contains_any': 0.005,
-        'contains_all': 0.005,
-        'equals': 0.005
+        'contains': hit_rate,
+        'contains_any': hit_rate,
+        'contains_all': hit_rate,
+        'equals': hit_rate
     }
 
     # Target values for each condition
@@ -119,6 +119,8 @@ def main(data_size):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_size", type=int, default=100000)
+    parser.add_argument("--hit_rate", type=int, default=0.005)
     args = parser.parse_args()
     datasize = args.data_size
-    main(datasize)
+    hit_rate = args.hit_rate
+    main(datasize, hit_rate)
