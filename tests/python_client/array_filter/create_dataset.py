@@ -119,7 +119,7 @@ def main(data_size, hit_rate=0.005):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_size", type=int, default=100000)
-    parser.add_argument("--hit_rate", type=int, default=0.005)
+    parser.add_argument("--hit_rate", type=float, default=0.005)
     args = parser.parse_args()
     datasize = args.data_size
     hit_rate = args.hit_rate
