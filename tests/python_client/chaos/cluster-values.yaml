@@ -138,6 +138,6 @@ pulsar:
 
 extraConfigFiles:
   user.yaml: |+
-    common:
-      materializedView:
-        enabled: true
+    dataCoord:
+      segment:
+        maxSize: 2048

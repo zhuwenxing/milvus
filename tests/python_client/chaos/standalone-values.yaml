@@ -33,4 +33,9 @@ minio:
   mode: standalone
 pulsar:
   enabled: false
-     
+
+extraConfigFiles:
+  user.yaml: |+
+    dataCoord:
+      segment:
+        maxSize: 2048
