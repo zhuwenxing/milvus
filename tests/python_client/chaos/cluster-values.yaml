@@ -140,4 +140,4 @@ extraConfigFiles:
   user.yaml: |+
     dataCoord:
       segment:
-        maxSize: 2048
+        maxSize: 1024

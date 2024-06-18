@@ -28,7 +28,7 @@ etcd:
   replicaCount: 3
   image:
     repository: milvusdb/etcd
-    tag: 3.5.5-r2  
+    tag: 3.5.5-r2
 minio:
   mode: standalone
 pulsar:
@@ -38,4 +38,4 @@ extraConfigFiles:
   user.yaml: |+
     dataCoord:
       segment:
-        maxSize: 2048
+        maxSize: 1024
