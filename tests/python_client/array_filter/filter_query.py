@@ -58,25 +58,26 @@ class MilvusUser(HttpUser):
             if resp.status_code != 200 or resp.json()["code"] != 0:
                 resp.failure(f"query failed with error {resp.text}")
             else:
+                pass
                 # compute recall
-                result_ids = [item["id"] for item in resp.json()["data"]]
-                true_ids = [item for item in self.gt]
-                tmp = set(true_ids).intersection(set(result_ids))
-                self.recall = len(tmp) / len(result_ids) if len(result_ids) > 0 else 0
-                # print(f"recall: {self.recall}")
-                self.recall_list.append(self.recall)
-                cur_time = datetime.now().timestamp()
-                self.ts_list.append(cur_time)
+                # result_ids = [item["id"] for item in resp.json()["data"]]
+                # true_ids = [item for item in self.gt]
+                # tmp = set(true_ids).intersection(set(result_ids))
+                # self.recall = len(tmp) / len(result_ids) if len(result_ids) > 0 else 0
+                # # print(f"recall: {self.recall}")
+                # self.recall_list.append(self.recall)
+                # cur_time = datetime.now().timestamp()
+                # self.ts_list.append(cur_time)
 
-    def on_stop(self):
-        # this is a good place to clean up/release any user-specific test data
-        # print(f"current recall is {self.recall}, "
-        #       f"avg recall is {sum(self.recall_list) / len(self.recall_list)}, "
-        #       f"max recall is {max(self.recall_list)}, "
-        #       f"min recall is {min(self.recall_list)}")
-        data = {"ts": self.ts_list, "recall": self.recall_list}
-        df = pd.DataFrame(data)
-        print(df)
+    # def on_stop(self):
+    #     # this is a good place to clean up/release any user-specific test data
+    #     # print(f"current recall is {self.recall}, "
+    #     #       f"avg recall is {sum(self.recall_list) / len(self.recall_list)}, "
+    #     #       f"max recall is {max(self.recall_list)}, "
+    #     #       f"min recall is {min(self.recall_list)}")
+    #     data = {"ts": self.ts_list, "recall": self.recall_list}
+    #     df = pd.DataFrame(data)
+    #     # print(df)
 
 class StagesShape(LoadTestShape):
     """
