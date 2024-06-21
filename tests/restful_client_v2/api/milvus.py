@@ -10,7 +10,17 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt
 from requests.exceptions import ConnectionError
 
 
-def logger_request_response(response, url, tt, headers, data, str_data, str_response, method):
+def logger_request_response(response, url, tt, headers, data, str_data, str_response, method, params=None):
+    # save data to jsonl file
+    with open('request_response.jsonl', 'a') as f:
+        f.write(json.dumps({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "params": params,
+            "data": data,
+            "response": response.json()
+        }) + "\n")
     if len(data) > 2000:
         data = data[:1000] + "..." + data[-1000:]
     try:
@@ -59,7 +69,7 @@ class Requests:
         response = requests.post(url, headers=headers, data=data, params=params)
         tt = time.time() - t0
         str_response = response.text[:200] + '...' + response.text[-200:] if len(response.text) > 400 else response.text
-        logger_request_response(response, url, tt, headers, data, str_data, str_response, "post")
+        logger_request_response(response, url, tt, headers, data, str_data, str_response, "post", params=params)
         return response
 
     @retry(retry=retry_if_exception_type(ConnectionError), stop=stop_after_attempt(3))
@@ -74,7 +84,7 @@ class Requests:
             response = requests.get(url, headers=headers, params=params, data=data)
         tt = time.time() - t0
         str_response = response.text[:200] + '...' + response.text[-200:] if len(response.text) > 400 else response.text
-        logger_request_response(response, url, tt, headers, data, str_data, str_response, "get")
+        logger_request_response(response, url, tt, headers, data, str_data, str_response, "get", params=params)
         return response
 
     @retry(retry=retry_if_exception_type(ConnectionError), stop=stop_after_attempt(3))
