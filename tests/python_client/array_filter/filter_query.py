@@ -20,7 +20,7 @@ def _(environment, **kw):
 
 
 class MilvusUser(HttpUser):
-    host = "http://10.104.15.106:19530"
+    host = "http://10.104.18.39:19530"
     filter = ""
     gt = []
     recall_list = []
@@ -64,7 +64,7 @@ class MilvusUser(HttpUser):
                 # true_ids = [item for item in self.gt]
                 # tmp = set(true_ids).intersection(set(result_ids))
                 # self.recall = len(tmp) / len(result_ids) if len(result_ids) > 0 else 0
-                # # print(f"recall: {self.recall}")
+                # print(f"recall: {self.recall}")
                 # self.recall_list.append(self.recall)
                 # cur_time = datetime.now().timestamp()
                 # self.ts_list.append(cur_time)

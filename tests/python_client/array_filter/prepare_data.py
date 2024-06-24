@@ -11,7 +11,7 @@ import argparse
 from loguru import logger
 
 
-def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1"):
+def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", element_datatype="int64"):
 
     connections.connect(
         host=host,
@@ -21,14 +21,26 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1"):
     if collection_name in list_collections():
         logger.info(f"collection {collection_name} exists, drop it")
         Collection(name=collection_name).drop()
-    fields = [
-        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-        FieldSchema(name="contains", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
-        FieldSchema(name="contains_any", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
-        FieldSchema(name="contains_all", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
-        FieldSchema(name="equals", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
-        FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=32)
-    ]
+    if element_datatype == "int64":
+        fields = [
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
+            FieldSchema(name="contains", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+            FieldSchema(name="contains_any", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+            FieldSchema(name="contains_all", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+            FieldSchema(name="equals", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
+            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=32)
+        ]
+    elif element_datatype == "varchar":
+        fields = [
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
+            FieldSchema(name="contains", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000, max_capacity=2000, ),
+            FieldSchema(name="contains_any", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000,  max_capacity=2000),
+            FieldSchema(name="contains_all", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000, max_capacity=2000),
+            FieldSchema(name="equals", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000, max_capacity=2000),
+            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=32)
+        ]
+    else:
+        raise Exception("element_datatype must be int64 or varchar")
     schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
     logger.info(schema)
     collection = Collection(name=collection_name, schema=schema)
@@ -85,5 +97,6 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="10.104.15.106")
     parser.add_argument("--minio_host", type=str, default="10.104.18.168")
     parser.add_argument("--port", type=int, default=19530)
+    parser.add_argument("--element_datatype", type=str, default="int64")
     args = parser.parse_args()
-    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host)
+    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, element_datatype=args.element_datatype)
