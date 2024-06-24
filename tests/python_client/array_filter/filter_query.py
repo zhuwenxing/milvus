@@ -36,6 +36,8 @@ class MilvusUser(HttpUser):
         filter_value = data["value"].tolist()[0].tolist()
         if filter_op == "contains":
             filter_value = filter_value[0]
+            if isinstance(filter_value, str):
+                filter_value = f"'{filter_value}'"
             self.filter = f"array_contains({filter_op}, {filter_value})"
         if filter_op == "contains_any":
             self.filter = f"array_contains_any({filter_op}, {filter_value})"
