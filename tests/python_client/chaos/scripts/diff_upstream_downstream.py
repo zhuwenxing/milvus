@@ -30,17 +30,18 @@ def convert_deepdiff(diff):
     return diff
 
 
-def get_collection_info(info, db_name, c_name):
+def get_collection_info(info, db_name, c_name, enable_compact):
     info[db_name][c_name] = {}
     c = Collection(c_name)
-    # flush and compact
-    logger.info(f"start flush and compact {db_name}.{c_name}")
-    try:
-        c.flush(timeout=10)
-        c.compact(timeout=10)
-        logger.info(f"finished flush and compact {db_name}.{c_name}")
-    except Exception as e:
-        logger.warning(f"failed to flush and compact {db_name}.{c_name}: {e}")
+    if enable_compact:
+        # flush and compact
+        logger.info(f"start flush and compact {db_name}.{c_name}")
+        try:
+            c.flush(timeout=10)
+            c.compact(timeout=10)
+            logger.info(f"finished flush and compact {db_name}.{c_name}")
+        except Exception as e:
+            logger.warning(f"failed to flush and compact {db_name}.{c_name}: {e}")
     info[db_name][c_name]['name'] = c.name
     logger.info(c.num_entities)
     info[db_name][c_name]['num_entities'] = c.num_entities
@@ -57,7 +58,7 @@ def get_collection_info(info, db_name, c_name):
         logger.info(f"no replica for {db_name}.{c_name}")
         replicas = 0
     logger.info(replicas)
-    info[db_name][c_name]['replicas'] = replicas    
+    info[db_name][c_name]['replicas'] = replicas
     if replicas > 0:
         try:
             logger.info(f"start query {db_name}.{c_name}")
@@ -69,7 +70,7 @@ def get_collection_info(info, db_name, c_name):
             logger.warning(f"failed to query {db_name}.{c_name}: {e}")
             info[db_name][c_name]['cnt'] = -1
 
-def get_cluster_info(host, port, user, password):
+def get_cluster_info(host, port, user, password, enable_compact=False):
     try:
         connections.disconnect(alias='default')
     except Exception as e:
@@ -88,7 +89,7 @@ def get_cluster_info(host, port, user, password):
         logger.info(all_collection)
         threads = []
         for collection_name in all_collection:
-            t = threading.Thread(target=get_collection_info, args=(info, db_name, collection_name))
+            t = threading.Thread(target=get_collection_info, args=(info, db_name, collection_name, enable_compact))
             threads.append(t)
             t.start()
         for t in threads:
@@ -105,13 +106,14 @@ if __name__ == '__main__':
     parser.add_argument('--upstream_host', type=str, default='10.100.36.179', help='milvus host')
     parser.add_argument('--downstream_host', type=str, default='10.100.36.178', help='milvus host')
     parser.add_argument('--upstream_port', type=str, default='19530', help='milvus host')
-    parser.add_argument('--downstream_port', type=str, default='19530', help='milvus host')  
+    parser.add_argument('--downstream_port', type=str, default='19530', help='milvus host')
     parser.add_argument('--port', type=str, default='19530', help='milvus port')
     parser.add_argument('--user', type=str, default='', help='milvus user')
     parser.add_argument('--password', type=str, default='', help='milvus password')
+    parser.add_argument('--enable_compact', type=bool, default=False, help='enable compact')
     args = parser.parse_args()
-    upstream = get_cluster_info(args.upstream_host, args.upstream_port, args.user, args.password)
-    downstream = get_cluster_info(args.downstream_host, args.downstream_port, args.user, args.password)
+    upstream = get_cluster_info(args.upstream_host, args.upstream_port, args.user, args.password, args.enable_compact)
+    downstream = get_cluster_info(args.downstream_host, args.downstream_port, args.user, args.password, args.enable_compact)
     logger.info(f"upstream info: {json.dumps(upstream, indent=2)}")
     logger.info(f"downstream info: {json.dumps(downstream, indent=2)}")
     diff = DeepDiff(upstream, downstream)
