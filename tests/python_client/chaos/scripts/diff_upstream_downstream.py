@@ -116,6 +116,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     diff_cnt = 0
     diff = None
+    t0 = time.time()
     while diff_cnt < 10:
         if diff_cnt == 0:
             enable_compact = args.enable_compact
@@ -146,5 +147,7 @@ if __name__ == '__main__':
         else:
             logger.info("no diff exclude num entities found between upstream and downstream")
             break
+    tt = time.time() - t0
+    logger.info(f"total time cost: {tt:.2f} seconds")
     if diff:
         assert False, f"diff found between upstream and downstream {json.dumps(diff, indent=2)}"
