@@ -12,6 +12,7 @@ query all data
 compare result
 
 """
+import time
 
 from loguru import logger
 import json
@@ -43,32 +44,33 @@ def get_collection_info(info, db_name, c_name, enable_compact):
         except Exception as e:
             logger.warning(f"failed to flush and compact {db_name}.{c_name}: {e}")
     info[db_name][c_name]['name'] = c.name
-    logger.info(c.num_entities)
+    # logger.info(c.num_entities)
     info[db_name][c_name]['num_entities'] = c.num_entities
-    logger.info(c.schema)
+    # logger.info(c.schema)
     info[db_name][c_name]['schema'] = len([f.name for f in c.schema.fields])
-    logger.info(c.indexes)
+    # logger.info(c.indexes)
     info[db_name][c_name]['indexes'] = [x.index_name for x in c.indexes]
-    logger.info(c.partitions)
+    # logger.info(c.partitions)
     info[db_name][c_name]['partitions'] = len([p.name for p in c.partitions])
     try:
         replicas = len(c.get_replicas().groups)
     except Exception as e:
         logger.warning(e)
-        logger.info(f"no replica for {db_name}.{c_name}")
+        # logger.info(f"no replica for {db_name}.{c_name}")
         replicas = 0
-    logger.info(replicas)
+    # logger.info(replicas)
     info[db_name][c_name]['replicas'] = replicas
     if replicas > 0:
         try:
-            logger.info(f"start query {db_name}.{c_name}")
+            # logger.info(f"start query {db_name}.{c_name}")
             res = c.query(expr="", output_fields=["count(*)"], timeout=60)
             cnt = res[0]["count(*)"]
-            logger.info(cnt)
+            # logger.info(cnt)
             info[db_name][c_name]['cnt'] = cnt
         except Exception as e:
-            logger.warning(f"failed to query {db_name}.{c_name}: {e}")
+            # logger.warning(f"failed to query {db_name}.{c_name}: {e}")
             info[db_name][c_name]['cnt'] = -1
+
 
 def get_cluster_info(host, port, user, password, enable_compact=False):
     try:
@@ -81,12 +83,12 @@ def get_cluster_info(host, port, user, password, enable_compact=False):
         connections.connect(host=host, port=port)
     info = {}
     all_db = db.list_database()
-    logger.info(all_db)
+    # logger.info(all_db)
     for db_name in all_db:
         info[db_name] = {}
         db.using_database(db_name)
         all_collection = list_collections()
-        logger.info(all_collection)
+        # logger.info(all_collection)
         threads = []
         for collection_name in all_collection:
             t = threading.Thread(target=get_collection_info, args=(info, db_name, collection_name, enable_compact))
@@ -95,7 +97,7 @@ def get_cluster_info(host, port, user, password, enable_compact=False):
         for t in threads:
             t.join()
 
-    logger.info(json.dumps(info, indent=2))
+    # logger.info(json.dumps(info, indent=2))
     return info
 
 
@@ -112,20 +114,37 @@ if __name__ == '__main__':
     parser.add_argument('--password', type=str, default='', help='milvus password')
     parser.add_argument('--enable_compact', type=bool, default=False, help='enable compact')
     args = parser.parse_args()
-    upstream = get_cluster_info(args.upstream_host, args.upstream_port, args.user, args.password, args.enable_compact)
-    downstream = get_cluster_info(args.downstream_host, args.downstream_port, args.user, args.password, args.enable_compact)
-    logger.info(f"upstream info: {json.dumps(upstream, indent=2)}")
-    logger.info(f"downstream info: {json.dumps(downstream, indent=2)}")
-    diff = DeepDiff(upstream, downstream)
-    diff = convert_deepdiff(diff)
-    logger.info(f"diff: {diff}")
-    logger.info(f"diff: {json.dumps(diff, indent=2)}")
-    with open("diff.json", "w") as f:
-        json.dump(diff, f, indent=2)
-    excludedRegex = [r"root(\[\'\w+\'\])*\['num_entities'\]"]
-    diff = DeepDiff(upstream, downstream, exclude_regex_paths=excludedRegex)
-    diff = convert_deepdiff(diff)
-    logger.info(f"diff exclude num entities: {diff}")
-    logger.info(f"diff exclude num entities: {json.dumps(diff, indent=2)}")
+    diff_cnt = 0
+    diff = None
+    while diff_cnt < 10:
+        if diff_cnt == 0:
+            enable_compact = args.enable_compact
+        else:
+            enable_compact = False
+        upstream = get_cluster_info(args.upstream_host, args.upstream_port, args.user, args.password,
+                                    enable_compact)
+        downstream = get_cluster_info(args.downstream_host, args.downstream_port, args.user, args.password,
+                                      enable_compact)
+        # logger.info(f"upstream info: {json.dumps(upstream, indent=2)}")
+        # logger.info(f"downstream info: {json.dumps(downstream, indent=2)}")
+        diff = DeepDiff(upstream, downstream)
+        diff = convert_deepdiff(diff)
+        logger.info(f"diff: {diff}")
+        logger.info(f"diff: {json.dumps(diff, indent=2)}")
+        with open("diff.json", "w") as f:
+            json.dump(diff, f, indent=2)
+        excludedRegex = [r"root(\[\'\w+\'\])*\['num_entities'\]"]
+        diff = DeepDiff(upstream, downstream, exclude_regex_paths=excludedRegex)
+        diff = convert_deepdiff(diff)
+        logger.info(f"diff exclude num entities: {diff}")
+        logger.info(f"diff exclude num entities: {json.dumps(diff, indent=2)}")
+        diff_cnt += 1
+        if diff:
+            logger.info(f"diff exclude num entities found between upstream and downstream {json.dumps(diff, indent=2)}")
+            time.sleep(60)
+
+        else:
+            logger.info("no diff exclude num entities found between upstream and downstream")
+            break
     if diff:
-        assert False, f"diff exclude num entities found between upstream and downstream {json.dumps(diff, indent=2)}"
+        assert False, f"diff found between upstream and downstream {json.dumps(diff, indent=2)}"
