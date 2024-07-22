@@ -120,6 +120,10 @@ if __name__ == '__main__':
     while diff_cnt < 10:
         if diff_cnt == 0:
             enable_compact = args.enable_compact
+            if enable_compact in ["True", "true", "1"]:
+                enable_compact = True
+            if enable_compact in ["False", "false", "0"]:
+                enable_compact = False
         else:
             enable_compact = False
         upstream = get_cluster_info(args.upstream_host, args.upstream_port, args.user, args.password,
