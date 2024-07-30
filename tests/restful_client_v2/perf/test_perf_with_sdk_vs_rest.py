@@ -13,10 +13,10 @@ from faker import Faker
 
 fake = Faker()
 
-def main(host="127.0.0.1"):
+def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
     connections.connect(
-        host=host,
-        port=19530,
+        uri=uri,
+        token=token,
     )
     collection = Collection(name="test_restful_perf")
     vector_to_search = [
@@ -35,7 +35,7 @@ def main(host="127.0.0.1"):
 
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer root:Milvus'
+        'Authorization': f'Bearer {token}'
     }
 
     for op in ["search", "hybrid_search", "query_id", "query_varchar", "insert"]:
@@ -71,7 +71,7 @@ def main(host="127.0.0.1"):
         if "query" in op:
             path = "query"
 
-        url = f"http://{host}:19530/v2/vectordb/entities/{path}"
+        url = f"{uri}/v2/vectordb/entities/{path}"
         logger.info(f"{op}...")
         for i in range(100):
             t0 = time.time()
@@ -140,7 +140,7 @@ def main(host="127.0.0.1"):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="perf test with sdk and restful")
-    parser.add_argument("--host", type=str, default="127.0.0.1")
-    args = parser.parse_args()
-    host = args.host
-    main(host=host)
+    parser.add_argument("--uri", type=str, default="http://127.0.0.19530")
+    parser.add_argument("--token", type=str, default="root:Milvus")
+    args = parser.parse_args()   
+    main(uri=args.uri, token=args.token)

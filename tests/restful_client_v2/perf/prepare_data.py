@@ -12,11 +12,11 @@ import faker
 fake = faker.Faker()
 
 
-def prepare_data(host="127.0.0.1", port=19530, data_size=1000000, minio_host="127.0.0.1"):
+def prepare_data(uri="http://127.0.0.1:19530", token="root:Milvus", data_size=1000000, insert_mode="import", minio_host="127.0.0.1"):
 
     connections.connect(
-        host=host,
-        port=port,
+        uri=uri,
+        token=token,
     )
 
     collection_name = "test_restful_perf"
@@ -36,48 +36,62 @@ def prepare_data(host="127.0.0.1", port=19530, data_size=1000000, minio_host="12
     index_params = {"metric_type": "L2", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
 
     logger.info(f"collection {collection_name} created")
-    with RemoteBulkWriter(
-        schema=schema,
-        file_type=BulkFileType.NUMPY,
-        remote_path="bulk_data",
-        connect_param=RemoteBulkWriter.S3ConnectParam(
-            endpoint=f"{minio_host}:9000",
-            access_key="minioadmin",
-            secret_key="minioadmin",
-            bucket_name="milvus-bucket"
-        )
-    ) as remote_writer:
-        for i in range(data_size):
-            row = {
+    if insert_mode == "import":
+        with RemoteBulkWriter(
+            schema=schema,
+            file_type=BulkFileType.NUMPY,
+            remote_path="bulk_data",
+            connect_param=RemoteBulkWriter.S3ConnectParam(
+                endpoint=f"{minio_host}:9000",
+                access_key="minioadmin",
+                secret_key="minioadmin",
+                bucket_name="milvus-bucket"
+            )
+        ) as remote_writer:
+            for i in range(data_size):
+                row = {
+                    "id": i,
+                    "doc_id": i,
+                    "text_no_index": str(i % 10000) + fake.text(max_nb_chars=1000),
+                    "text": str(i%10000)+fake.text(max_nb_chars=1000),
+                    "text_emb": [random.random() for _ in range(768)],
+                    "image_emb": [random.random() for _ in range(768)]
+                }
+                remote_writer.append_row(row)
+            remote_writer.commit()
+            batch_files = remote_writer.batch_files
+        task_ids = []
+        for files in batch_files:
+            task_id = utility.do_bulk_insert(collection_name=collection_name, files=files)
+            task_ids.append(task_id)
+            logger.info(f"Create a bulk inert task, task id: {task_id}")
+
+        while len(task_ids) > 0:
+            logger.info("Wait 1 second to check bulk insert tasks state...")
+            time.sleep(1)
+            for id in task_ids:
+                state = utility.get_bulk_insert_state(task_id=id)
+                if state.state == BulkInsertState.ImportFailed or state.state == BulkInsertState.ImportFailedAndCleaned:
+                    logger.info(f"The task {state.task_id} failed, reason: {state.failed_reason}")
+                    task_ids.remove(id)
+                elif state.state == BulkInsertState.ImportCompleted:
+                    logger.info(f"The task {state.task_id} completed with state {state}")
+                    task_ids.remove(id)
+        logger.info(f"inserted {data_size} vectors")
+    if insert_mode == "insert":
+        batch_size = 10000
+        for e in range(data_size//batch_size):
+            rows = [{
                 "id": i,
                 "doc_id": i,
                 "text_no_index": str(i % 10000) + fake.text(max_nb_chars=1000),
                 "text": str(i%10000)+fake.text(max_nb_chars=1000),
                 "text_emb": [random.random() for _ in range(768)],
                 "image_emb": [random.random() for _ in range(768)]
-            }
-            remote_writer.append_row(row)
-        remote_writer.commit()
-        batch_files = remote_writer.batch_files
-    task_ids = []
-    for files in batch_files:
-        task_id = utility.do_bulk_insert(collection_name=collection_name, files=files)
-        task_ids.append(task_id)
-        logger.info(f"Create a bulk inert task, task id: {task_id}")
-
-    while len(task_ids) > 0:
-        logger.info("Wait 1 second to check bulk insert tasks state...")
-        time.sleep(1)
-        for id in task_ids:
-            state = utility.get_bulk_insert_state(task_id=id)
-            if state.state == BulkInsertState.ImportFailed or state.state == BulkInsertState.ImportFailedAndCleaned:
-                logger.info(f"The task {state.task_id} failed, reason: {state.failed_reason}")
-                task_ids.remove(id)
-            elif state.state == BulkInsertState.ImportCompleted:
-                logger.info(f"The task {state.task_id} completed with state {state}")
-                task_ids.remove(id)
-
-    logger.info(f"inserted {data_size} vectors")
+            } for i in range(e*batch_size, (e+1)*batch_size)]
+            collection.insert(rows)
+            logger.info(f"inserted {batch_size} vectors in batch {e}/ {data_size//batch_size}")
+        logger.info(f"inserted {data_size} vectors")
     collection.create_index("text_emb", index_params=index_params)
     collection.create_index("image_emb", index_params=index_params)
     collection.create_index("text", index_params={"index_type": "INVERTED"})
@@ -97,9 +111,11 @@ def prepare_data(host="127.0.0.1", port=19530, data_size=1000000, minio_host="12
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare data for perf test")
-    parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--uri", type=str, default="http://127.0.0.1:19530")
+    parser.add_argument("--token", type=str, default="root:Milvus")
     parser.add_argument("--minio_host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=19530)
     parser.add_argument("--data_size", type=int, default=1000000)
+    parser.add_argument("--insert_mode", type=str, default="insert")
     args = parser.parse_args()
-    prepare_data(host=args.host, port=args.port, data_size=args.data_size, minio_host=args.minio_host)
+    prepare_data(uri=args.uri, token=args.token, data_size=args.data_size, minio_host=args.minio_host, insert_mode=args.insert_mode)
