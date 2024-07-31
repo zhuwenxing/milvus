@@ -74,12 +74,13 @@ def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
         url = f"{uri}/v2/vectordb/entities/{path}"
         logger.info(f"{op}...")
         for i in range(100):
+            random_id = random.randint(0, 1000 - 1)
             t0 = time.time()
             if op == "search":
                 payload = json.dumps({"collectionName": "test_restful_perf",
                                       "outputFields": ["*"],
                                       "annsField": "text_emb",
-                                      "data": [random.random() for _ in range(768)],
+                                      "data": [vector_to_search[random_id]],
                                       "limit": 100,
                                       })
 
@@ -88,11 +89,11 @@ def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
                 payload = json.dumps({"collectionName": "test_restful_perf",
                                     "search": [
                                         {
-                                            "data": [random.random() for _ in range(768)],
+                                            "data": [vector_to_search[random_id]],
                                             "annsField": "text_emb",
                                         },
                                         {
-                                            "data": [random.random() for _ in range(768)],
+                                            "data": [vector_to_search[random_id]],
                                             "annsField": "image_emb",
                                         },
                                     ],
@@ -142,5 +143,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="perf test with sdk and restful")
     parser.add_argument("--uri", type=str, default="http://127.0.0.19530")
     parser.add_argument("--token", type=str, default="root:Milvus")
-    args = parser.parse_args()   
+    args = parser.parse_args()
     main(uri=args.uri, token=args.token)
