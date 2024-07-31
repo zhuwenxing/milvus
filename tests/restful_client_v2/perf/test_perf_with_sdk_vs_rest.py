@@ -64,7 +64,7 @@ def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
             t1 = time.time()
             tt = t1 - t0
             time_list_sdk.append(tt)
-            logger.info(f"{op} cost  {tt:.4f} ...")
+            # logger.info(f"{op} cost  {tt:.4f} ...")
 
         logger.info("start restful test")
         path = op
