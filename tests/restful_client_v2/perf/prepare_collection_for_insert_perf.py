@@ -7,10 +7,10 @@ from loguru import logger
 import argparse
 
 
-def main(host="127.0.0.1"):
+def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
     connections.connect(
-        host=host,
-        port=19530,
+        uri=uri,
+        token=token,
     )
     collection_name = "test_restful_insert_perf"
     if collection_name in list_collections():
@@ -31,6 +31,7 @@ def main(host="127.0.0.1"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare data for perf test")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="milvus server host")
+    parser.add_argument("--uri", type=str, default="http://127.0.0.1:19530", help="milvus uri")
+    parser.add_argument("--token", type=str, default="root:Milvus", help="milvus token")
     args = parser.parse_args()
-    main(host=args.host)
+    main(uri=args.uri, token=args.token)
