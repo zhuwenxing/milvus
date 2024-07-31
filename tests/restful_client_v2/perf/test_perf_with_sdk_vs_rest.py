@@ -45,7 +45,7 @@ def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
         for i in range(100):
             random_id = random.randint(0, 1000 - 1)
             t0 = time.time()
-            logger.info(f"{op}...")
+            # logger.info(f"{op}...")
             if op == "search":
                 res = collection.search([vector_to_search[random_id]], "text_emb", search_params, 100, output_fields=["*"])
             elif op == "hybrid_search":
