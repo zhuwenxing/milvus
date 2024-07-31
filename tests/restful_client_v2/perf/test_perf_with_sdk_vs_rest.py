@@ -91,10 +91,12 @@ def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
                                         {
                                             "data": [vector_to_search[random_id]],
                                             "annsField": "text_emb",
+                                            "limit": 100,
                                         },
                                         {
                                             "data": [vector_to_search[random_id]],
                                             "annsField": "image_emb",
+                                            "limit": 100,
                                         },
                                     ],
                                     "rerank": {
@@ -129,7 +131,7 @@ def main(uri="http://127.0.0.1:19530", token="root:Milvus"):
             t1 = time.time()
             tt = t1 - t0
             time_list_restful.append(tt)
-            if response.json()["code"] != 200:
+            if response.json()["code"] != 0:
                 logger.error(f"{op} failed with response {response.text}")
 
         mean_time_sdk = sum(time_list_sdk) / len(time_list_sdk)
