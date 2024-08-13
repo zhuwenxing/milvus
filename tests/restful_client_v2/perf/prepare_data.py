@@ -12,7 +12,7 @@ import faker
 fake = faker.Faker()
 
 
-def prepare_data(uri="http://127.0.0.1:19530", token="root:Milvus", data_size=1000000, insert_mode="import", minio_host="127.0.0.1"):
+def prepare_data(uri="http://127.0.0.1:19530", token="root:Milvus", data_size=1000000, insert_mode="insert", minio_host="127.0.0.1"):
 
     connections.connect(
         uri=uri,
@@ -79,7 +79,7 @@ def prepare_data(uri="http://127.0.0.1:19530", token="root:Milvus", data_size=10
                     task_ids.remove(id)
         logger.info(f"inserted {data_size} vectors")
     if insert_mode == "insert":
-        batch_size = 10000
+        batch_size = 5000
         for e in range(data_size//batch_size):
             rows = [{
                 "id": i,
