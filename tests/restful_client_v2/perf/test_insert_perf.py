@@ -1,8 +1,11 @@
-from locust import HttpUser, task, LoadTestShape
+from locust import HttpUser, task, LoadTestShape, events
 import random
 from faker import Faker
 
 fake = Faker()
+@events.init_command_line_parser.add_listener
+def _(parser):
+    parser.add_argument("--token", type=str, env_var="TOKEN", default="root:Milvus")
 
 
 class MilvusUser(HttpUser):
@@ -24,7 +27,7 @@ class MilvusUser(HttpUser):
                               json={"collectionName": "test_restful_perf",
                                     "data": self.vectors_to_insert
                                     },
-                              headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},
+                              headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.environment.parsed_options.token}"},
                               catch_response=True
                               ) as resp:
             if resp.status_code != 200 or resp.json()["code"] != 200:
