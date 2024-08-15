@@ -37,7 +37,20 @@ def main(uri="http://127.0.0.1:19530", http_uri="http://127.0.0.1:19530", token=
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {token}'
     }
-
+    def warm_up():
+        logger.info("start warm up")
+        for i in range(50):
+            random_id = random.randint(0, 1000 - 1)
+            res = collection.search([vector_to_search[random_id]], "text_emb", search_params, 100, output_fields=["*"])
+            sq1=AnnSearchRequest([vector_to_search[random_id]], "text_emb", search_params, 100)
+            sq2=AnnSearchRequest([vector_to_search[random_id]], "image_emb", search_params, 100)
+            res = collection.hybrid_search([sq1, sq2], RRFRanker(60), 100, output_fields=["*"])
+            res = collection.query(expr=f"id in {[x for x in range(100)]}", output_fields=["*"], limit=100)
+            res = collection.query(expr='text like "9999%"', output_fields=["*"], limit=100)
+            insert_collection = Collection(name="test_restful_insert_perf")
+            res = insert_collection.insert(data=insert_data)
+        logger.info("warm up done")
+    warm_up()
     for op in ["search", "hybrid_search", "query_id", "query_varchar", "insert"]:
         time_list_sdk = []
         time_list_restful = []
