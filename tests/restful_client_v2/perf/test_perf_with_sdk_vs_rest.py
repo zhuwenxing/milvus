@@ -64,7 +64,7 @@ def main(uri="http://127.0.0.1:19530", http_uri="http://127.0.0.1:19530", token=
             t1 = time.time()
             tt = t1 - t0
             time_list_sdk.append(tt)
-            # logger.info(f"{op} cost  {tt:.4f} ...")
+            logger.info(f"sdk {op} cost  {tt:.4f} ...")
 
         logger.info("start restful test")
         path = op
@@ -131,14 +131,17 @@ def main(uri="http://127.0.0.1:19530", http_uri="http://127.0.0.1:19530", token=
             t1 = time.time()
             tt = t1 - t0
             time_list_restful.append(tt)
+            logger.info(f"restful {op} cost  {tt:.4f} ...")
             if response.json()["code"] != 0:
                 logger.error(f"{op} failed with response {response.text}")
 
         mean_time_sdk = sum(time_list_sdk) / len(time_list_sdk)
+        p95_time_sdk = sorted(time_list_sdk)[int(len(time_list_sdk) * 0.95)]
         mean_time_restful = sum(time_list_restful) / len(time_list_restful)
-        logger.info(f"[sdk]{op} ave time {mean_time_sdk} , max time {max(time_list_sdk)}, min time {min(time_list_sdk)}")
+        p95_time_restful = sorted(time_list_restful)[int(len(time_list_restful) * 0.95)]
+        logger.info(f"[sdk]{op} ave time {mean_time_sdk} , p95 time {p95_time_sdk}, max time {max(time_list_sdk)}, min time {min(time_list_sdk)}")
         logger.info(
-            f"[restful]{op} ave time {mean_time_restful} , max time {max(time_list_restful)}, min time {min(time_list_restful)}")
+            f"[restful]{op} ave time {mean_time_restful} , p95 time {p95_time_restful}  max time {max(time_list_restful)}, min time {min(time_list_restful)}")
 
 
 if __name__ == '__main__':
