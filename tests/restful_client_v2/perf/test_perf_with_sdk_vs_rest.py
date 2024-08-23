@@ -79,6 +79,8 @@ def main(uri="http://127.0.0.1:19530", http_uri="http://127.0.0.1:19530", token=
             tt = t1 - t0
             time_list_sdk.append(tt)
             logger.info(f"sdk {op} cost  {tt:.4f} ...")
+            if op == "insert":
+                time.sleep(1)
 
         logger.info("start restful test")
         path = op
@@ -148,6 +150,8 @@ def main(uri="http://127.0.0.1:19530", http_uri="http://127.0.0.1:19530", token=
             logger.info(f"restful {op} cost  {tt:.4f} ...")
             if response.json()["code"] != 0:
                 logger.error(f"{op} failed with response {response.text}")
+            if op == "insert":
+                time.sleep(1)
 
         mean_time_sdk = sum(time_list_sdk) / len(time_list_sdk)
         p95_time_sdk = sorted(time_list_sdk)[int(len(time_list_sdk) * 0.95)]
