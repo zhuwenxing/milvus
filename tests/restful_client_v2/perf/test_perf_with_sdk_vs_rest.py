@@ -55,22 +55,23 @@ def main(uri="http://127.0.0.1:19530", http_uri="http://127.0.0.1:19530", token=
         time_list_sdk = []
         time_list_restful = []
         logger.info("start sdk test")
+        insert_collection = Collection(name="test_restful_insert_perf")
         for i in range(100):
             random_id = random.randint(0, 1000 - 1)
+            if op == "hybrid_search":
+                sq1=AnnSearchRequest([vector_to_search[random_id]], "text_emb", search_params, 100)
+                sq2=AnnSearchRequest([vector_to_search[random_id]], "image_emb", search_params, 100)
             t0 = time.time()
             # logger.info(f"{op}...")
             if op == "search":
                 res = collection.search([vector_to_search[random_id]], "text_emb", search_params, 100, output_fields=["*"])
             elif op == "hybrid_search":
-                sq1=AnnSearchRequest([vector_to_search[random_id]], "text_emb", search_params, 100)
-                sq2=AnnSearchRequest([vector_to_search[random_id]], "image_emb", search_params, 100)
                 res = collection.hybrid_search([sq1, sq2], RRFRanker(60), 100, output_fields=["*"])
             elif op == "query_id":
                 res = collection.query(expr=f"id in {[x for x in range(100)]}", output_fields=["*"], limit=100)
             elif op == "query_varchar":
                 res = collection.query(expr='text like "9999%"', output_fields=["*"], limit=100)
             elif op == "insert":
-                insert_collection = Collection(name="test_restful_insert_perf")
                 res = insert_collection.insert(data=insert_data)
             else:
                 raise Exception(f"unsupported op {op}")
