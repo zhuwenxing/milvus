@@ -90,7 +90,7 @@ def main(data_size, hit_rate=0.005):
         "contains_any": pd.Series([x["contains_any"] for x in dataset]),
         "contains_all": pd.Series([x["contains_all"] for x in dataset]),
         "equals": pd.Series([x["equals"] for x in dataset]),
-        "emb": pd.Series([np.array([random.random() for j in range(32)], dtype=np.dtype("float32")) for _ in
+        "emb": pd.Series([np.array([random.random() for j in range(128)], dtype=np.dtype("float32")) for _ in
                           range(size)])
     }
 

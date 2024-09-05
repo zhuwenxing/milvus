@@ -28,7 +28,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", element_d
             FieldSchema(name="contains_any", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
             FieldSchema(name="contains_all", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
             FieldSchema(name="equals", dtype=DataType.ARRAY, element_type=DataType.INT64, max_capacity=2000),
-            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=32)
+            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=128)
         ]
     elif element_datatype == "varchar":
         fields = [
@@ -37,7 +37,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", element_d
             FieldSchema(name="contains_any", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000,  max_capacity=2000),
             FieldSchema(name="contains_all", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000, max_capacity=2000),
             FieldSchema(name="equals", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_length=1000, max_capacity=2000),
-            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=32)
+            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=128)
         ]
     else:
         raise Exception("element_datatype must be int64 or varchar")
