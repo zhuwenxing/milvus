@@ -17,8 +17,8 @@ spec:
       enableActiveStandby: true
     indexCoord:
       enableActiveStandby: true
-#    mixCoord:
-#      enableActiveStandby: true
+    #    mixCoord:
+    #      enableActiveStandby: true
     quotaAndLimits:
       enable: false
     log:
@@ -29,6 +29,13 @@ spec:
     image: milvusdb/milvus:2.2.0-20231021-1f972292
     disableMetric: false
     standalone:
+      resources:
+        requests:
+          cpu: 4
+          memory: 8Gi
+        limits:
+          cpu: 8
+          memory: 16Gi
       replicas: 1
     rootCoord:
       replicas: 1
@@ -45,6 +52,13 @@ spec:
     indexNode:
       replicas: 3
     queryNode:
+      resources:
+        requests:
+          cpu: 2
+          memory: 8Gi
+        limits:
+          cpu: 4
+          memory: 16Gi
       replicas: 3
   dependencies:
     msgStreamType: kafka
