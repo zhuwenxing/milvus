@@ -213,7 +213,7 @@ class TestOperations(TestBase):
                 cmd = f"kubectl get mi |grep {meta_name}"
                 output = run_cmd(cmd)
                 log.info(f"output: {output}")
-                if "True" in output:
+                if "True" in output and "Healthy" in output:
                     ready = True
                 else:
                     log.info(prefix + "wait 10s for milvus ready")
