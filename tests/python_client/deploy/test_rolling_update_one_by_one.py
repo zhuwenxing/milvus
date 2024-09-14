@@ -213,8 +213,22 @@ class TestOperations(TestBase):
                 cmd = f"kubectl get mi |grep {meta_name}"
                 output = run_cmd(cmd)
                 log.info(f"output: {output}")
+                
                 if "True" in output and "Healthy" in output:
-                    ready = True
+                    # Check if the status remains stable for 1 minute
+                    stable = True
+                    for _ in range(6):  # Check every 10 seconds, 6 times in total (60 seconds)
+                        sleep(10)
+                        output = run_cmd(cmd)
+                        log.info(f"Re-check output: {output}")
+                        if "True" not in output or "Healthy" not in output:
+                            stable = False
+                            break
+                    
+                    if stable:
+                        ready = True
+                    else:
+                        log.info(prefix + "status not stable, continue waiting")
                 else:
                     log.info(prefix + "wait 10s for milvus ready")
                     sleep(10)
