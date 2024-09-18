@@ -143,6 +143,18 @@ def run_cmd(cmd):
     log.info(f"{cmd}\n{output}\n")
     return output
 
+def check_querynode_upgrade_complete(release_name, namespace):
+    cmd = f"kubectl get deployment -n {namespace} | grep {release_name} | grep querynode"
+    output = run_cmd(cmd)
+    log.info(f"querynode deployment status: {output}")
+    deployments = [line.split() for line in output.strip().split('\n')]
+
+    for deployment in deployments:
+        name, ready, *_ = deployment
+        ready_pods, total_pods = map(int, ready.split('/'))
+        if ready_pods == total_pods:
+            return True
+    return False
 
 
 class TestOperations(TestBase):
@@ -213,7 +225,7 @@ class TestOperations(TestBase):
                 cmd = f"kubectl get mi |grep {meta_name}"
                 output = run_cmd(cmd)
                 log.info(f"output: {output}")
-                
+
                 if "True" in output and "Healthy" in output:
                     # Check if the status remains stable for 1 minute
                     stable = True
@@ -224,7 +236,12 @@ class TestOperations(TestBase):
                         if "True" not in output or "Healthy" not in output:
                             stable = False
                             break
-                    
+                    if component == "queryNode":
+                        log.info(prefix + "add additional check for queryNode")
+                        while not check_querynode_upgrade_complete(meta_name, namespace):
+                            print("Querynode upgrade not complete, waiting...")
+                            time.sleep(10)
+
                     if stable:
                         ready = True
                     else:
