@@ -13458,3 +13458,44 @@ class TestCollectionSearchNoneAndDefaultData(TestcaseBase):
                                          "output_fields": [default_int64_field_name,
                                                            default_float_field_name]})
 
+
+
+class TestBM25Search(TestcaseBase):
+    """ Add some test cases for the sparse vector """
+
+    @pytest.mark.tags(CaseLabel.L1)
+    @pytest.mark.parametrize("index", ["SPARSE_INVERTED_INDEX", "SPARSE_WAND"])
+    def test_bm25_sparse_search(self, index):
+        """
+        target: verify that sparse index for sparse vectors can be searched properly
+        method: create connection, collection, insert and search
+        expected: search successfully
+        """
+        self._connect()
+        c_name = cf.gen_unique_str(prefix)
+        schema = cf.gen_default_sparse_schema(auto_id=False)
+        collection_w = self.init_collection_wrap(c_name, schema=schema)
+        data = cf.gen_default_list_sparse_data(nb=3000)
+        collection_w.insert(data)
+        params = cf.get_index_params_params(index)
+        index_params = {"index_type": index, "metric_type": "IP", "params": params}
+        collection_w.create_index(ct.default_sparse_vec_field_name, index_params, index_name=index)
+        collection_w.load()
+
+        collection_w.search(data[-1][0:default_nq], ct.default_sparse_vec_field_name,
+                            ct.default_sparse_search_params, default_limit,
+                            output_fields=[ct.default_sparse_vec_field_name],
+                            check_task=CheckTasks.check_search_results,
+                            check_items={"nq": default_nq,
+                                         "limit": default_limit,
+                                         "original_entities": [data],
+                                         "output_fields": [ct.default_sparse_vec_field_name]})
+        expr = "int64 < 100 "
+        collection_w.search(data[-1][0:default_nq], ct.default_sparse_vec_field_name,
+                            ct.default_sparse_search_params, default_limit,
+                            expr=expr, output_fields=[ct.default_sparse_vec_field_name],
+                            check_task=CheckTasks.check_search_results,
+                            check_items={"nq": default_nq,
+                                         "limit": default_limit,
+                                         "original_entities": [data],
+                                         "output_fields": [ct.default_sparse_vec_field_name]})

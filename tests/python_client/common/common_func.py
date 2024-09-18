@@ -693,6 +693,51 @@ def gen_default_sparse_schema(description=ct.default_desc, primary_field=ct.defa
     return sparse_schema
 
 
+def gen_default_bm25_schema(description=ct.default_desc, primary_field=ct.default_int64_field_name,
+                              auto_id=False, with_json=False, multiple_dim_array=[], nullable_fields={},
+                              default_value_fields={}, **kwargs):
+    if default_value_fields.get(ct.default_int64_field_name) is None:
+        int64_field = gen_int64_field(nullable=(ct.default_int64_field_name in nullable_fields))
+    else:
+        int64_field = gen_int64_field(nullable=(ct.default_int64_field_name in nullable_fields),
+                                      default_value=default_value_fields.get(ct.default_int64_field_name))
+    if default_value_fields.get(ct.default_float_field_name) is None:
+        float_field = gen_float_field(nullable=(ct.default_float_field_name in nullable_fields))
+    else:
+        float_field = gen_float_field(nullable=(ct.default_float_field_name in nullable_fields),
+                                      default_value=default_value_fields.get(ct.default_float_field_name))
+    if default_value_fields.get(ct.default_string_field_name) is None:
+        string_field = gen_string_field(nullable=(ct.default_string_field_name in nullable_fields))
+    else:
+        string_field = gen_string_field(nullable=(ct.default_string_field_name in nullable_fields),
+                                        default_value=default_value_fields.get(ct.default_string_field_name))
+    if default_value_fields.get(ct.default_sparse_vec_field_name) is None:
+        sparse_vec_field = gen_sparse_vec_field(nullable=(ct.default_sparse_vec_field_name in nullable_fields))
+    else:
+        sparse_vec_field = gen_sparse_vec_field(nullable=(ct.default_sparse_vec_field_name in nullable_fields),
+                                                default_value=default_value_fields.get(ct.default_sparse_vec_field_name))
+    fields = [int64_field, float_field, string_field, sparse_vec_field]
+
+    if with_json:
+        if default_value_fields.get(ct.default_json_field_name) is None:
+            json_field = gen_json_field(nullable=(ct.default_json_field_name in nullable_fields))
+        else:
+            json_field = gen_json_field(nullable=(ct.default_json_field_name in nullable_fields),
+                                        default_value=default_value_fields.get(ct.default_json_field_name))
+        fields.insert(-1, json_field)
+
+    if len(multiple_dim_array) != 0:
+        for i in range(len(multiple_dim_array)):
+            vec_name = ct.default_sparse_vec_field_name + "_" + str(i)
+            vec_field = gen_sparse_vec_field(name=vec_name)
+            fields.append(vec_field)
+    sparse_schema, _ = ApiCollectionSchemaWrapper().init_collection_schema(fields=fields, description=description,
+                                                                           primary_field=primary_field,
+                                                                           auto_id=auto_id, **kwargs)
+    return sparse_schema
+
+
+
 def gen_schema_multi_vector_fields(vec_fields):
     fields = [gen_int64_field(), gen_float_field(), gen_string_field(), gen_float_vec_field()]
     fields.extend(vec_fields)
