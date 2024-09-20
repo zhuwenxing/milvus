@@ -148,13 +148,15 @@ def check_querynode_upgrade_complete(release_name, namespace):
     output = run_cmd(cmd)
     log.info(f"querynode deployment status: {output}")
     deployments = [line.split() for line in output.strip().split('\n')]
-
+    status = []
     for deployment in deployments:
         name, ready, *_ = deployment
         ready_pods, total_pods = map(int, ready.split('/'))
         if ready_pods == total_pods:
-            return True
-    return False
+            status.append(True)
+        else:
+            status.append(False)
+    return all(status)
 
 
 class TestOperations(TestBase):
