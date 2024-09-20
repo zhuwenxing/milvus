@@ -149,13 +149,28 @@ def check_querynode_upgrade_complete(release_name, namespace):
     log.info(f"querynode deployment status: {output}")
     deployments = [line.split() for line in output.strip().split('\n')]
     status = []
+    current_deployment = ""
+    name_list = []
+    for deployment in deployments:
+        name, ready, *_ = deployment
+        name_list.append(name)
+    name_list = sorted(name_list)
+    current_deployment = name_list[-1]
+
     for deployment in deployments:
         name, ready, *_ = deployment
         ready_pods, total_pods = map(int, ready.split('/'))
-        if ready_pods == total_pods:
-            status.append(True)
+        # the old querynode deployment should have 0/0 pods ready
+        if name != current_deployment:
+            if ready_pods == 0:
+                status.append(True)
+            else:
+                status.append(False)
         else:
-            status.append(False)
+            if ready_pods == total_pods:
+                status.append(True)
+            else:
+                status.append(False)
     return all(status)
 
 
