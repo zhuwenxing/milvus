@@ -2,20 +2,19 @@ import random
 import pandas as pd
 import numpy as np
 import argparse
+import os
 
-def generate_dataset(size, array_length, hit_probabilities, target_values):
+def generate_dataset_batch(batch_size, array_length, hit_probabilities, target_values):
     dataset = []
     all_target_values = set(
         val for sublist in target_values.values() for val in (sublist if isinstance(sublist, list) else [sublist]))
-    for i in range(size):
+    for i in range(batch_size):
         entry = {"id": i}
 
-        # Generate random arrays for each condition
         for condition in hit_probabilities.keys():
             available_values = [val for val in range(1, 100) if val not in all_target_values]
             array = random.sample(available_values, array_length)
 
-            # Ensure the array meets the condition based on its probability
             if random.random() < hit_probabilities[condition]:
                 if condition == 'contains':
                     if target_values[condition] not in array:
@@ -36,10 +35,24 @@ def generate_dataset(size, array_length, hit_probabilities, target_values):
 
     return dataset
 
+def save_batch_to_parquet(batch, batch_number, output_dir):
+    data = {
+        "id": pd.Series([x["id"] for x in batch]),
+        "contains": pd.Series([x["contains"] for x in batch]),
+        "contains_any": pd.Series([x["contains_any"] for x in batch]),
+        "contains_all": pd.Series([x["contains_all"] for x in batch]),
+        "equals": pd.Series([x["equals"] for x in batch]),
+        "emb": pd.Series([np.array([random.random() for j in range(128)], dtype=np.dtype("float32")) for _ in
+                          range(len(batch))])
+    }
 
-def main(data_size, hit_rate=0.005):
+    df = pd.DataFrame(data)
+    filename = f"train_batch_{batch_number}.parquet"
+    df.to_parquet(os.path.join(output_dir, filename))
+    print(f"Saved {filename}")
+
+def main(data_size, hit_rate=0.005, batch_size=1000000):
     # Parameters
-    size = data_size  # Number of arrays in the dataset
     array_length = 10  # Length of each array
 
     # Probabilities that an array hits the target condition
@@ -58,46 +71,40 @@ def main(data_size, hit_rate=0.005):
         'equals': [x for x in range(array_length)]
     }
 
-    # Generate dataset
-    dataset = generate_dataset(size, array_length, hit_probabilities, target_values)
+    # Create output directory
+    output_dir = "train_data"
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Define testing conditions
+    # Generate and save data in batches
+    for batch_number in range(0, data_size, batch_size):
+        current_batch_size = min(batch_size, data_size - batch_number)
+        batch = generate_dataset_batch(current_batch_size, array_length, hit_probabilities, target_values)
+        save_batch_to_parquet(batch, batch_number // batch_size, output_dir)
+
+    # Perform tests on the last batch (as an example)
     contains_value = target_values['contains']
     contains_any_values = target_values['contains_any']
     contains_all_values = target_values['contains_all']
     equals_array = target_values['equals']
 
-    # Perform tests
-    contains_result = [d for d in dataset if contains_value in d["contains"]]
-    contains_any_result = [d for d in dataset if any(val in d["contains_any"] for val in contains_any_values)]
-    contains_all_result = [d for d in dataset if all(val in d["contains_all"] for val in contains_all_values)]
-    equals_result = [d for d in dataset if d["equals"] == equals_array]
+    contains_result = [d for d in batch if contains_value in d["contains"]]
+    contains_any_result = [d for d in batch if any(val in d["contains_any"] for val in contains_any_values)]
+    contains_all_result = [d for d in batch if all(val in d["contains_all"] for val in contains_all_values)]
+    equals_result = [d for d in batch if d["equals"] == equals_array]
 
-    # Calculate and print proportions
-    contains_ratio = len(contains_result) / size
-    contains_any_ratio = len(contains_any_result) / size
-    contains_all_ratio = len(contains_all_result) / size
-    equals_ratio = len(equals_result) / size
+    # Calculate and print proportions for the last batch
+    contains_ratio = len(contains_result) / current_batch_size
+    contains_any_ratio = len(contains_any_result) / current_batch_size
+    contains_all_ratio = len(contains_all_result) / current_batch_size
+    equals_ratio = len(equals_result) / current_batch_size
 
-    print("\nProportion of arrays that contain the value:", contains_ratio)
+    print("\nProportions for the last batch:")
+    print("Proportion of arrays that contain the value:", contains_ratio)
     print("Proportion of arrays that contain any of the values:", contains_any_ratio)
     print("Proportion of arrays that contain all of the values:", contains_all_ratio)
     print("Proportion of arrays that equal the target array:", equals_ratio)
 
-    data = {
-        "id": pd.Series([x["id"] for x in dataset]),
-        "contains": pd.Series([x["contains"] for x in dataset]),
-        "contains_any": pd.Series([x["contains_any"] for x in dataset]),
-        "contains_all": pd.Series([x["contains_all"] for x in dataset]),
-        "equals": pd.Series([x["equals"] for x in dataset]),
-        "emb": pd.Series([np.array([random.random() for j in range(128)], dtype=np.dtype("float32")) for _ in
-                          range(size)])
-    }
-
-    df = pd.DataFrame(data)
-    print(df)
-    df.to_parquet("train.parquet")
-
+    # Generate test data
     target_id = {
         "contains": [r["id"] for r in contains_result],
         "contains_any": [r["id"] for r in contains_any_result],
@@ -115,12 +122,10 @@ def main(data_size, hit_rate=0.005):
     print(df)
     df.to_parquet("test.parquet")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_size", type=int, default=100000)
     parser.add_argument("--hit_rate", type=float, default=0.005)
+    parser.add_argument("--batch_size", type=int, default=100000)
     args = parser.parse_args()
-    datasize = args.data_size
-    hit_rate = args.hit_rate
-    main(datasize, hit_rate)
+    main(args.data_size, args.hit_rate, args.batch_size)

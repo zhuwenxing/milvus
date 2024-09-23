@@ -46,7 +46,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", element_d
     collection = Collection(name=collection_name, schema=schema)
     index_params = {"metric_type": "L2", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
     logger.info(f"collection {collection_name} created")
-    batch_files = glob.glob("./train*.parquet")
+    batch_files = glob.glob("./train_data/*.parquet")
     logger.info(f"files {batch_files}")
     # copy file to minio
     client = Minio(
