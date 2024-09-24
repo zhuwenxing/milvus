@@ -13,7 +13,57 @@ import argparse
 from loguru import logger
 from faker import Faker
 import random
-def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_name="milvus-bucket", data_size=1000000):
+import multiprocessing as mp
+
+def clean_and_reinsert_tokens(df, token_probabilities):
+    text_columns = ['word', 'sentence', 'paragraph', 'text']
+    
+    # Clean tokens
+    for col in text_columns:
+        df[col] = df[col].apply(lambda x: clean_tokens(x, token_probabilities.keys()))
+    
+    # Reinsert tokens
+    for col in text_columns:
+        df[col] = df[col].apply(lambda x: reinsert_tokens(x, token_probabilities))
+    
+    return df
+
+def clean_tokens(text, tokens):
+    for token in tokens:
+        text = text.replace(token, '')
+    return text
+
+def reinsert_tokens(text, token_probabilities):
+    words = text.split()
+    for token, prob in token_probabilities.items():
+        if random.random() < prob:
+            insert_position = random.randint(0, len(words)-1)
+            # logger.info(f"insert token {token} at position {insert_position}")
+            words[insert_position] = token
+    return ' '.join(words)
+
+
+def generate_and_process_batch(e, batch_size, dim, token_probabilities):
+    fake_en = Faker('en_US')
+    data = [{
+            "id": i,
+            "word": fake_en.word().lower(),
+            "sentence": fake_en.sentence().lower(),
+            "paragraph": fake_en.paragraph().lower(),
+            "text": fake_en.text().lower(),
+            "emb": [random.random() for _ in range(dim)]
+        } for i in range(e*batch_size, (e+1)*batch_size)
+    ]
+    df = pd.DataFrame(data)
+    df = clean_and_reinsert_tokens(df, token_probabilities)
+    logger.info(f"dataframe\n {df}")
+    df.to_parquet(f"./train_data/train-{e}.parquet")
+    logger.info(f"progress: {e+1}")
+    return f"./train_data/train-{e}.parquet"
+
+
+
+def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_name="milvus-bucket", data_size=1000000, hit_rate=0.005):
 
     connections.connect(
         host=host,
@@ -39,11 +89,12 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
     schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
     logger.info(schema)
     collection = Collection(name=collection_name, schema=schema)
-    index_params = {"metric_type": "L2", "index_type": "FLAT"}
+    index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 16, "efConstruction": 500}}
     logger.info(f"collection {collection_name} created")
     # create dataset
     # clean all parquet
-    files = glob.glob("./train*.parquet")
+    os.makedirs("./train_data", exist_ok=True)
+    files = glob.glob("./train_data/train*.parquet")
     for file in files:
         try:
             os.remove(file)
@@ -51,21 +102,18 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
             logger.info(f"delete file failed with error {e}")
     batch_size = 100000
     epoch = data_size // batch_size
-    fake_en = Faker('en_US')
-    for e in range(epoch):
-        data = [{
-                "id": i,
-                "word": fake_en.word(),
-                "sentence": fake_en.sentence(),
-                "paragraph": fake_en.paragraph(),
-                "text": fake_en.text(),
-                "emb": [random.random() for _ in range(dim)]
-            } for i in range(e*batch_size, (e+1)*batch_size)
-        ]
-        df = pd.DataFrame(data)
-        df.to_parquet(f"./train-{e}.parquet")
-        logger.info(f"progress: {e+1}/{epoch}")
-    batch_files = glob.glob("./train*.parquet")
+    token_probabilities={
+        "milvus": hit_rate,
+    }
+    # Prepare arguments for multiprocessing
+    args_list = [(e, batch_size, dim, token_probabilities) for e in range(epoch)]
+
+    # Use multiprocessing to generate and process data
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        results = pool.starmap(generate_and_process_batch, args_list)
+    logger.info(f"files {results}")
+    
+    batch_files = glob.glob("./train_data/train*.parquet")
     logger.info(f"files {batch_files}")
     # copy file to minio
     client = Minio(
@@ -113,10 +161,11 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare data for perf test")
-    parser.add_argument("--host", type=str, default="10.104.9.218")
-    parser.add_argument("--minio_host", type=str, default="10.104.23.30")
+    parser.add_argument("--host", type=str, default="10.104.17.79")
+    parser.add_argument("--minio_host", type=str, default="10.104.21.211")
     parser.add_argument("--bucket_name", type=str, default="milvus-bucket")
     parser.add_argument("--port", type=int, default=19530)
-    parser.add_argument("--data_size", type=int, default=1000000)
+    parser.add_argument("--data_size", type=int, default=100000)
+    parser.add_argument("--hit_rate", type=float, default=0.005)
     args = parser.parse_args()
-    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, data_size=args.data_size, bucket_name=args.bucket_name)
+    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, data_size=args.data_size, bucket_name=args.bucket_name, hit_rate=args.hit_rate)

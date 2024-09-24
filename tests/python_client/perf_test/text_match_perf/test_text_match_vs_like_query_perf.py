@@ -1,76 +1,10 @@
-from locust import HttpUser, task, events, tag, LoadTestShape
-import polars as pl
-from collections import Counter
-import time
-import bm25s
-import jieba
+from locust import HttpUser, task, tag, LoadTestShape
 
-def analyze_documents(texts, language="en"):
-    # Create a stemmer
-    # stemmer = Stemmer.Stemmer("english")
-    stopwords = "en"
-    if language in ["en", "english"]:
-        stopwords= "en"
-    if language in ["zh", "cn", "chinese"]:
-        stopword = " "
-        new_texts = []
-        for doc in texts:
-            seg_list = jieba.cut(doc)
-            new_texts.append(" ".join(seg_list))
-        texts = new_texts
-        stopwords = [stopword]
-    # Start timing
-    t0 = time.time()
-
-    # Tokenize the corpus
-    tokenized = bm25s.tokenize(texts, lower=True, stopwords=stopwords)
-    # log.info(f"Tokenized: {tokenized}")
-    # Create a frequency counter
-    freq = Counter()
-
-    # Count the frequency of each token
-    for doc_ids in tokenized.ids:
-        freq.update(doc_ids)
-    # Create a reverse vocabulary mapping
-    id_to_word = {id: word for word, id in tokenized.vocab.items()}
-
-    # Convert token ids back to words
-    word_freq = Counter({id_to_word[token_id]: count for token_id, count in freq.items()})
-
-    # End timing
-    tt = time.time() - t0
-    print(f"Analyze document cost time: {tt}")
-
-    return word_freq, tokenized
-
-
-def get_word_freq_and_tokenize():
-    df = pl.read_parquet("./train-*.parquet")
-
-    text_fields = ["word", "sentence", "paragraph", "text"]
-    wf_map = {}
-    tokenize_map = {}
-    for field in text_fields:
-        freq, token = analyze_documents(df[field].to_list())
-        wf_map[field] = freq
-        tokenize_map[field] = token
-    return wf_map, tokenize_map
-
-
-@events.init_command_line_parser.add_listener
-def _(parser):
-    parser.add_argument("--filter_op", type=str, env_var="LOCUST_FILTER", default="contains", help="filter op")
-
-
-@events.test_start.add_listener
-def _(environment, **kw):
-    print(f"Custom argument supplied: {environment.parsed_options.filter_op}")
 
 
 class MilvusUser(HttpUser):
-    host = "http://10.104.18.39:19530"
-    wf_map, tokenize_map = get_word_freq_and_tokenize()
-    token_candidate = list(wf_map["sentence"].most_common()[-1][0])
+    host = "http://10.104.17.79:19530"
+    token_candidate = "milvus"
     text_match_filter = f"TextMatch(sentence, '{token_candidate}')"
     like_filter = f"sentence like '%{token_candidate}%'"
     gt = []
