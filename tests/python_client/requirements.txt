@@ -64,6 +64,6 @@ ml-dtypes==0.2.0
 # for text match
 bm25s==0.2.0
 jieba==0.42.1
-
+polars==1.7.1
 # for perf test
 locust==2.25.0
