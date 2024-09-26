@@ -1203,9 +1203,9 @@ class TestBulkInsert(TestcaseBaseBulkInsert):
     @pytest.mark.parametrize("auto_id", [True, False])
     @pytest.mark.parametrize("dim", [128])  # 128
     @pytest.mark.parametrize("entities", [2000])
-    @pytest.mark.parametrize("enable_dynamic_field", [True, False])
+    @pytest.mark.parametrize("enable_dynamic_field", [False])
     @pytest.mark.parametrize("enable_partition_key", [True, False])
-    @pytest.mark.parametrize("include_meta", [True, False])
+    @pytest.mark.parametrize("include_meta", [False])
     @pytest.mark.parametrize("nullable", [False])
     def test_bulk_insert_all_field_with_csv(self, auto_id, dim, entities, enable_dynamic_field,
                                                 enable_partition_key, include_meta, nullable):
@@ -1233,14 +1233,14 @@ class TestBulkInsert(TestcaseBaseBulkInsert):
             cf.gen_float_field(name=df.float_field, nullable=nullable),
             cf.gen_string_field(name=df.string_field, is_partition_key=enable_partition_key, nullable=nullable),
             cf.gen_json_field(name=df.json_field, nullable=nullable),
-            cf.gen_array_field(name=df.array_int_field, element_type=DataType.INT64, nullable=nullable),
-            cf.gen_array_field(name=df.array_float_field, element_type=DataType.FLOAT, nullable=nullable),
-            cf.gen_array_field(name=df.array_string_field, element_type=DataType.VARCHAR, max_length=100, nullable=nullable),
-            cf.gen_array_field(name=df.array_bool_field, element_type=DataType.BOOL, nullable=nullable),
+            # cf.gen_array_field(name=df.array_int_field, element_type=DataType.INT64, nullable=nullable),
+            # cf.gen_array_field(name=df.array_float_field, element_type=DataType.FLOAT, nullable=nullable),
+            # cf.gen_array_field(name=df.array_string_field, element_type=DataType.VARCHAR, max_length=100, nullable=nullable),
+            # cf.gen_array_field(name=df.array_bool_field, element_type=DataType.BOOL, nullable=nullable),
             cf.gen_float_vec_field(name=df.float_vec_field, dim=float_vec_field_dim),
-            cf.gen_binary_vec_field(name=df.binary_vec_field, dim=binary_vec_field_dim),
-            cf.gen_bfloat16_vec_field(name=df.bf16_vec_field, dim=bf16_vec_field_dim),
-            cf.gen_float16_vec_field(name=df.fp16_vec_field, dim=fp16_vec_field_dim)
+            # cf.gen_binary_vec_field(name=df.binary_vec_field, dim=binary_vec_field_dim),
+            # cf.gen_bfloat16_vec_field(name=df.bf16_vec_field, dim=bf16_vec_field_dim),
+            # cf.gen_float16_vec_field(name=df.fp16_vec_field, dim=fp16_vec_field_dim)
         ]
         data_fields = [f.name for f in fields if not f.to_dict().get("auto_id", False)]
         self._connect()

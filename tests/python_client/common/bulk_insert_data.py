@@ -498,6 +498,7 @@ def gen_sparse_vectors(rows, sparse_format="dok"):
 def gen_data_by_data_field(data_field, rows, start=0, float_vector=True, dim=128, array_length=None, sparse_format="dok", **kwargs):
     if array_length is None:
         array_length = random.randint(0, 10)
+    convert_type = kwargs.get("convert_type", False)
     schema = kwargs.get("schema", None)
     schema = schema.to_dict() if schema is not None else None
     nullable = False
@@ -528,6 +529,8 @@ def gen_data_by_data_field(data_field, rows, start=0, float_vector=True, dim=128
                 data = pd.Series([np.array(x, dtype=np.dtype("uint8")) for x in data])
             else:
                 data = gen_vectors(float_vector=float_vector, rows=rows, dim=dim)
+                if float_vector and convert_type:
+                    data = pd.Series([np.array(x, dtype=np.dtype("float16")) for x in data])
         elif data_field == DataField.float_field:
             if not nullable:
                 data = [np.float32(random.random()) for _ in range(rows)]
@@ -982,7 +985,7 @@ def gen_csv_files(float_vector, rows, dim, data_fields, file_size=None, row_grou
                       array_length=None, err_type="", enable_dynamic_field=False, include_meta=True,
                       sparse_format="doc", **kwargs):
     schema = kwargs.get("schema", None)
-    u_id = f"parquet-{uuid.uuid4()}"
+    u_id = f"csv-{uuid.uuid4()}"
     data_source_new = f"{data_source}/{u_id}"
     schema_file = f"{data_source_new}/schema.json"
     Path(schema_file).parent.mkdir(parents=True, exist_ok=True)
@@ -1004,7 +1007,7 @@ def gen_csv_files(float_vector, rows, dim, data_fields, file_size=None, row_grou
         for data_field in data_fields:
             data = gen_data_by_data_field(data_field=data_field, rows=rows, start=0,
                                           float_vector=float_vector, dim=dim, array_length=array_length,
-                                          sparse_format=sparse_format, **kwargs)
+                                          sparse_format=sparse_format, convert_type=True, **kwargs)
             all_field_data[data_field] = data
         if enable_dynamic_field and include_meta:
             all_field_data["$meta"] = gen_dynamic_field_data_in_parquet_file(rows=rows, start=0)
@@ -1012,9 +1015,9 @@ def gen_csv_files(float_vector, rows, dim, data_fields, file_size=None, row_grou
         log.info(f"df: \n{df}")
         file_name = f"data-fields-{len(data_fields)}-rows-{rows}-dim-{dim}-file-num-{file_nums}-error-{err_type}-{int(time.time())}.csv"
         if row_group_size is not None:
-            df.to_csv(f"{data_source_new}/{file_name}")
+            df.to_csv(f"{data_source_new}/{file_name}", index=False)
         else:
-            df.to_csv(f"{data_source_new}/{file_name}")
+            df.to_csv(f"{data_source_new}/{file_name}", index=False)
         # get the file size
         if file_size is not None:
             batch_file_size = os.path.getsize(f"{data_source_new}/{file_name}")
@@ -1026,9 +1029,9 @@ def gen_csv_files(float_vector, rows, dim, data_fields, file_size=None, row_grou
             file_name = f"data-fields-{len(data_fields)}-rows-{total_rows}-dim-{dim}-file-num-{file_nums}-error-{err_type}-{int(time.time())}.csv"
             log.info(f"all df: \n {all_df}")
             if row_group_size is not None:
-                all_df.to_csv(f"{data_source_new}/{file_name}")
+                all_df.to_csv(f"{data_source_new}/{file_name}", index=False)
             else:
-                all_df.to_csv(f"{data_source_new}/{file_name}")
+                all_df.to_csv(f"{data_source_new}/{file_name}", index=False)
             batch_file_size = os.path.getsize(f"{data_source_new}/{file_name}")
             log.info(f"file_size with rows {total_rows} for {file_name}: {batch_file_size/1024/1024} MB")
         files.append(file_name)
@@ -1042,11 +1045,11 @@ def gen_csv_files(float_vector, rows, dim, data_fields, file_size=None, row_grou
             if enable_dynamic_field:
                 all_field_data["$meta"] = gen_dynamic_field_data_in_parquet_file(rows=rows, start=0)
             df = pd.DataFrame(all_field_data)
-            file_name = f"data-fields-{len(data_fields)}-rows-{rows}-dim-{dim}-file-num-{i}-error-{err_type}-{int(time.time())}.parquet"
+            file_name = f"data-fields-{len(data_fields)}-rows-{rows}-dim-{dim}-file-num-{i}-error-{err_type}-{int(time.time())}.csv"
             if row_group_size is not None:
-                df.to_parquet(f"{data_source_new}/{file_name}", engine='pyarrow', row_group_size=row_group_size)
+                df.to_parquet(f"{data_source_new}/{file_name}")
             else:
-                df.to_parquet(f"{data_source_new}/{file_name}", engine='pyarrow')
+                df.to_parquet(f"{data_source_new}/{file_name}")
             files.append(file_name)
             start_uid += rows
     files = [f"{u_id}/{f}" for f in files]
