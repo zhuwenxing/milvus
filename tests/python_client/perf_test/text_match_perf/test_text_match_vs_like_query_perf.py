@@ -4,7 +4,7 @@ from locust import HttpUser, task, tag, LoadTestShape
 
 class MilvusUser(HttpUser):
     host = "http://10.104.17.79:19530"
-    token_candidate = "milvus"
+    token_candidate = ["hello", "milvus", "vector", "database"]
     text_match_filter = f"TextMatch(sentence, '{token_candidate}')"
     like_filter = f"sentence like '%{token_candidate}%'"
     gt = []

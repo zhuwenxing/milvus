@@ -35,11 +35,11 @@ def clean_tokens(text, tokens):
 
 def reinsert_tokens(text, token_probabilities):
     words = text.split()
+    insert_position = -1
     for token, prob in token_probabilities.items():
+        insert_position += 1
         if random.random() < prob:
-            insert_position = random.randint(0, len(words)-1)
-            # logger.info(f"insert token {token} at position {insert_position}")
-            words[insert_position] = token
+            words.insert(insert_position, token)
     return ' '.join(words)
 
 
@@ -63,7 +63,7 @@ def generate_and_process_batch(e, batch_size, dim, token_probabilities):
 
 
 
-def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_name="milvus-bucket", data_size=1000000, hit_rate=0.005):
+def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_name="milvus-bucket", data_size=1000000):
     dim = 32
     # create dataset
     # clean all parquet
@@ -77,7 +77,10 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
     batch_size = 100000
     epoch = data_size // batch_size
     token_probabilities={
-        "milvus": hit_rate,
+        "hello": 0.1,
+        "milvus": 0.01,
+        "vector": 0.001,
+        "database": 0.0001,
     }
     # Prepare arguments for multiprocessing
     args_list = [(e, batch_size, dim, token_probabilities) for e in range(epoch)]
@@ -95,74 +98,74 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
     logger.info(f"files {batch_files}")
     logger.info(f"generate data time cost: {tt} s")
 
-    connections.connect(
-        host=host,
-        port=port,
-    )
-    collection_name = "test_text_match_perf"
-
-    if collection_name in list_collections():
-        logger.info(f"collection {collection_name} exists, drop it")
-        Collection(name=collection_name).drop()
-
-    analyzer_params = {
-        "tokenizer": "default",
-    }
-    fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-            FieldSchema(name="word", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="sentence", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="paragraph", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=dim)
-        ]
-    schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
-    logger.info(schema)
-    collection = Collection(name=collection_name, schema=schema)
-    index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 16, "efConstruction": 500}}
-    logger.info(f"collection {collection_name} created")
+    # connections.connect(
+    #     host=host,
+    #     port=port,
+    # )
+    # collection_name = "test_text_match_perf"
+    #
+    # if collection_name in list_collections():
+    #     logger.info(f"collection {collection_name} exists, drop it")
+    #     Collection(name=collection_name).drop()
+    #
+    # analyzer_params = {
+    #     "tokenizer": "default",
+    # }
+    # fields = [
+    #         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
+    #         FieldSchema(name="word", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+    #         FieldSchema(name="sentence", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+    #         FieldSchema(name="paragraph", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+    #         FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+    #         FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=dim)
+    #     ]
+    # schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
+    # logger.info(schema)
+    # collection = Collection(name=collection_name, schema=schema)
+    # index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 16, "efConstruction": 500}}
+    # logger.info(f"collection {collection_name} created")
     # copy file to minio
-    client = Minio(
-            f"{minio_host}:9000",
-            access_key="minioadmin",
-            secret_key="minioadmin",
-            secure=False,
-        )
-    for file in batch_files:
-        f_name = file.split("/")[-1]
-        client.fput_object(f"{bucket_name}", f_name, file)
-        logger.info(f"upload file {file}")
-    batch_files = [file.split("/")[-1] for file in batch_files]
-    task_ids = []
-    for files in batch_files:
-        task_id = utility.do_bulk_insert(collection_name=collection_name, files=[files])
-        task_ids.append(task_id)
-        logger.info(f"Create a bulk inert task, task id: {task_id}")
-
-    while len(task_ids) > 0:
-        logger.info("Wait 1 second to check bulk insert tasks state...")
-        time.sleep(1)
-        for id in task_ids:
-            state = utility.get_bulk_insert_state(task_id=id)
-            if state.state == BulkInsertState.ImportFailed or state.state == BulkInsertState.ImportFailedAndCleaned:
-                logger.info(f"The task {state.task_id} failed, reason: {state.failed_reason}")
-                task_ids.remove(id)
-            elif state.state == BulkInsertState.ImportCompleted:
-                logger.info(f"The task {state.task_id} completed with state {state}")
-                task_ids.remove(id)
-
-    collection.create_index("emb", index_params=index_params)
-    index_list = utility.list_indexes(collection_name=collection_name)
-    for index_name in index_list:
-        progress = utility.index_building_progress(collection_name=collection_name, index_name=index_name)
-        while progress["pending_index_rows"] > 0:
-            time.sleep(30)
-            progress = utility.index_building_progress(collection_name=collection_name, index_name=index_name)
-            logger.info(f"collection {collection_name} index {index_name} progress: {progress}")
-        logger.info(f"collection {collection_name} index {index_name} progress: {progress}")
-    collection.load()
-    num = collection.num_entities
-    logger.info(f"collection {collection_name} loaded, num_entities: {num}")
+    # client = Minio(
+    #         f"{minio_host}:9000",
+    #         access_key="minioadmin",
+    #         secret_key="minioadmin",
+    #         secure=False,
+    #     )
+    # for file in batch_files:
+    #     f_name = file.split("/")[-1]
+    #     client.fput_object(f"{bucket_name}", f_name, file)
+    #     logger.info(f"upload file {file}")
+    # batch_files = [file.split("/")[-1] for file in batch_files]
+    # task_ids = []
+    # for files in batch_files:
+    #     task_id = utility.do_bulk_insert(collection_name=collection_name, files=[files])
+    #     task_ids.append(task_id)
+    #     logger.info(f"Create a bulk inert task, task id: {task_id}")
+    #
+    # while len(task_ids) > 0:
+    #     logger.info("Wait 1 second to check bulk insert tasks state...")
+    #     time.sleep(1)
+    #     for id in task_ids:
+    #         state = utility.get_bulk_insert_state(task_id=id)
+    #         if state.state == BulkInsertState.ImportFailed or state.state == BulkInsertState.ImportFailedAndCleaned:
+    #             logger.info(f"The task {state.task_id} failed, reason: {state.failed_reason}")
+    #             task_ids.remove(id)
+    #         elif state.state == BulkInsertState.ImportCompleted:
+    #             logger.info(f"The task {state.task_id} completed with state {state}")
+    #             task_ids.remove(id)
+    #
+    # collection.create_index("emb", index_params=index_params)
+    # index_list = utility.list_indexes(collection_name=collection_name)
+    # for index_name in index_list:
+    #     progress = utility.index_building_progress(collection_name=collection_name, index_name=index_name)
+    #     while progress["pending_index_rows"] > 0:
+    #         time.sleep(30)
+    #         progress = utility.index_building_progress(collection_name=collection_name, index_name=index_name)
+    #         logger.info(f"collection {collection_name} index {index_name} progress: {progress}")
+    #     logger.info(f"collection {collection_name} index {index_name} progress: {progress}")
+    # collection.load()
+    # num = collection.num_entities
+    # logger.info(f"collection {collection_name} loaded, num_entities: {num}")
 
 
 if __name__ == "__main__":
@@ -172,6 +175,5 @@ if __name__ == "__main__":
     parser.add_argument("--bucket_name", type=str, default="milvus-bucket")
     parser.add_argument("--port", type=int, default=19530)
     parser.add_argument("--data_size", type=int, default=1000_000)
-    parser.add_argument("--hit_rate", type=float, default=0.005)
     args = parser.parse_args()
-    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, data_size=args.data_size, bucket_name=args.bucket_name, hit_rate=args.hit_rate)
+    prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, data_size=args.data_size, bucket_name=args.bucket_name)
