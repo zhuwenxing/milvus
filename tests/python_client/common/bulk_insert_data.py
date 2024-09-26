@@ -978,6 +978,81 @@ def gen_parquet_files(float_vector, rows, dim, data_fields, file_size=None, row_
     return files
 
 
+def gen_csv_files(float_vector, rows, dim, data_fields, file_size=None, row_group_size=None, file_nums=1,
+                      array_length=None, err_type="", enable_dynamic_field=False, include_meta=True,
+                      sparse_format="doc", **kwargs):
+    schema = kwargs.get("schema", None)
+    u_id = f"parquet-{uuid.uuid4()}"
+    data_source_new = f"{data_source}/{u_id}"
+    schema_file = f"{data_source_new}/schema.json"
+    Path(schema_file).parent.mkdir(parents=True, exist_ok=True)
+    if schema is not None:
+        data = schema.to_dict()
+        with open(schema_file, "w") as f:
+            json.dump(data, f)
+
+    # gen numpy files
+    if err_type == "":
+        err_type = "none"
+    files = []
+    #  generate 5000 entities and check the file size, then calculate the rows to be generated
+    if file_size is not None:
+        rows = 5000
+    start_uid = 0
+    if file_nums == 1:
+        all_field_data = {}
+        for data_field in data_fields:
+            data = gen_data_by_data_field(data_field=data_field, rows=rows, start=0,
+                                          float_vector=float_vector, dim=dim, array_length=array_length,
+                                          sparse_format=sparse_format, **kwargs)
+            all_field_data[data_field] = data
+        if enable_dynamic_field and include_meta:
+            all_field_data["$meta"] = gen_dynamic_field_data_in_parquet_file(rows=rows, start=0)
+        df = pd.DataFrame(all_field_data)
+        log.info(f"df: \n{df}")
+        file_name = f"data-fields-{len(data_fields)}-rows-{rows}-dim-{dim}-file-num-{file_nums}-error-{err_type}-{int(time.time())}.csv"
+        if row_group_size is not None:
+            df.to_csv(f"{data_source_new}/{file_name}")
+        else:
+            df.to_csv(f"{data_source_new}/{file_name}")
+        # get the file size
+        if file_size is not None:
+            batch_file_size = os.path.getsize(f"{data_source_new}/{file_name}")
+            log.info(f"file_size with rows {rows} for {file_name}: {batch_file_size/1024/1024} MB")
+            # calculate the rows to be generated
+            total_batch = int(file_size*1024*1024*1024/batch_file_size)
+            total_rows = total_batch * rows
+            all_df = pd.concat([df for _ in range(total_batch)], axis=0, ignore_index=True)
+            file_name = f"data-fields-{len(data_fields)}-rows-{total_rows}-dim-{dim}-file-num-{file_nums}-error-{err_type}-{int(time.time())}.csv"
+            log.info(f"all df: \n {all_df}")
+            if row_group_size is not None:
+                all_df.to_csv(f"{data_source_new}/{file_name}")
+            else:
+                all_df.to_csv(f"{data_source_new}/{file_name}")
+            batch_file_size = os.path.getsize(f"{data_source_new}/{file_name}")
+            log.info(f"file_size with rows {total_rows} for {file_name}: {batch_file_size/1024/1024} MB")
+        files.append(file_name)
+    else:
+        for i in range(file_nums):
+            all_field_data = {}
+            for data_field in data_fields:
+                data = gen_data_by_data_field(data_field=data_field, rows=rows, start=0,
+                                              float_vector=float_vector, dim=dim, array_length=array_length)
+                all_field_data[data_field] = data
+            if enable_dynamic_field:
+                all_field_data["$meta"] = gen_dynamic_field_data_in_parquet_file(rows=rows, start=0)
+            df = pd.DataFrame(all_field_data)
+            file_name = f"data-fields-{len(data_fields)}-rows-{rows}-dim-{dim}-file-num-{i}-error-{err_type}-{int(time.time())}.parquet"
+            if row_group_size is not None:
+                df.to_parquet(f"{data_source_new}/{file_name}", engine='pyarrow', row_group_size=row_group_size)
+            else:
+                df.to_parquet(f"{data_source_new}/{file_name}", engine='pyarrow')
+            files.append(file_name)
+            start_uid += rows
+    files = [f"{u_id}/{f}" for f in files]
+    return files
+
+
 def prepare_bulk_insert_json_files(minio_endpoint="", bucket_name="milvus-bucket",
                                    is_row_based=True, rows=100, dim=128,
                                    auto_id=True, str_pk=False, float_vector=True,
@@ -1142,88 +1217,43 @@ def prepare_bulk_insert_parquet_files(minio_endpoint="", bucket_name="milvus-buc
     return files
 
 
-def gen_csv_file(file, float_vector, data_fields, rows, dim, start_uid):
-    with open(file, "w") as f:
-        # field name
-        for i in range(len(data_fields)):
-            f.write(data_fields[i])
-            if i != len(data_fields) - 1:
-                f.write(",")
-        f.write("\n")
-
-        for i in range(rows):
-            # field value
-            for j in range(len(data_fields)):
-                data_field = data_fields[j]
-                if data_field == DataField.pk_field:
-                    f.write(str(i + start_uid))
-                if data_field == DataField.int_field:
-                    f.write(str(random.randint(-999999, 9999999)))
-                if data_field == DataField.float_field:
-                    f.write(str(random.random()))
-                if data_field == DataField.string_field:
-                    f.write(str(gen_unique_str()))
-                if data_field == DataField.bool_field:
-                    f.write(str(random.choice(["true", "false"])))
-                if data_field == DataField.vec_field:
-                    vectors = gen_float_vectors(1, dim) if float_vector else gen_binary_vectors(1, dim//8)
-                    f.write('"' + ','.join(str(x) for x in vectors) + '"')
-                if j != len(data_fields) - 1:
-                    f.write(",")
-            f.write("\n")
-
-
-def gen_csv_files(rows, dim, auto_id, float_vector, data_fields, file_nums, force):
-    files = []
-    start_uid = 0
-    if (not auto_id) and (DataField.pk_field not in data_fields):
-        data_fields.append(DataField.pk_field)
-    for i in range(file_nums):
-        file_name = gen_file_name(is_row_based=True, rows=rows, dim=dim, auto_id=auto_id, float_vector=float_vector, data_fields=data_fields, file_num=i, file_type=".csv", str_pk=False, err_type="")
-        file = f"{data_source}/{file_name}"
-        if not os.path.exists(file) or force:
-            gen_csv_file(file, float_vector, data_fields, rows, dim, start_uid)
-        start_uid += rows
-        files.append(file_name)
-    return files
-
-
-def prepare_bulk_insert_csv_files(minio_endpoint="", bucket_name="milvus-bucket", rows=100, dim=128, auto_id=True, float_vector=True, data_fields=[], file_nums=1, force=False):
+def prepare_bulk_insert_csv_files(minio_endpoint="", bucket_name="milvus-bucket", rows=100, dim=128, array_length=None,
+                                      file_size=None, row_group_size=None, enable_dynamic_field=False,
+                                      data_fields=[DataField.vec_field], float_vector=True, file_nums=1, force=False,
+                                      include_meta=True, sparse_format="doc", **kwargs):
     """
-    Generate row based files based on params in csv format and copy them to minio
+    Generate column based files based on params in csv format and copy them to the minio
+    Note: each field in data_fields would be generated one parquet file.
 
-    :param minio_endpoint: the minio_endpoint of minio
-    :type minio_endpoint: str
-
-    :param bucket_name: the bucket name of Milvus
-    :type bucket_name: str
-
-    :param rows: the number entities to be generated in the file
+    :param rows: the number entities to be generated in the file(s)
     :type rows: int
 
     :param dim: dim of vector data
     :type dim: int
 
-    :param auto_id: generate primary key data or not
-    :type auto_id: bool
-
-    :param float_vector: generate float vectors or binary vectors
+    :param: float_vector: generate float vectors or binary vectors
     :type float_vector: boolean
 
     :param: data_fields: data fields to be generated in the file(s):
-            It supports one or all of [pk, vectors, int, float, string, boolean]
-            Note: it automatically adds pk field if auto_id=False
+            it supports one or all of [int_pk, vectors, int, float]
+            Note: it does not automatically add pk field
     :type data_fields: list
 
     :param file_nums: file numbers to be generated
+        The file(s) would be  generated in data_source folder if file_nums = 1
+        The file(s) would be generated in different sub-folders if file_nums > 1
     :type file_nums: int
 
     :param force: re-generate the file(s) regardless existing or not
     :type force: boolean
+
+    Return: List
+        File name list or file name with sub-folder list
     """
-    data_fields_c = copy.deepcopy(data_fields)
-    log.info(f"data_fields: {data_fields}")
-    log.info(f"data_fields_c: {data_fields_c}")
-    files = gen_csv_files(rows=rows, dim=dim, auto_id=auto_id, float_vector=float_vector, data_fields=data_fields_c, file_nums=file_nums, force=force)
+    files = gen_csv_files(rows=rows, dim=dim, float_vector=float_vector, enable_dynamic_field=enable_dynamic_field,
+                              data_fields=data_fields, array_length=array_length, file_size=file_size, row_group_size=row_group_size,
+                              file_nums=file_nums, include_meta=include_meta, sparse_format=sparse_format, **kwargs)
     copy_files_to_minio(host=minio_endpoint, r_source=data_source, files=files, bucket_name=bucket_name, force=force)
     return files
+
+
