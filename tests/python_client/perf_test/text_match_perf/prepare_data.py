@@ -17,15 +17,15 @@ import multiprocessing as mp
 
 def clean_and_reinsert_tokens(df, token_probabilities):
     text_columns = ['word', 'sentence', 'paragraph', 'text']
-    
+
     # Clean tokens
     for col in text_columns:
         df[col] = df[col].apply(lambda x: clean_tokens(x, token_probabilities.keys()))
-    
+
     # Reinsert tokens
     for col in text_columns:
         df[col] = df[col].apply(lambda x: reinsert_tokens(x, token_probabilities))
-    
+
     return df
 
 def clean_tokens(text, tokens):
@@ -64,33 +64,7 @@ def generate_and_process_batch(e, batch_size, dim, token_probabilities):
 
 
 def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_name="milvus-bucket", data_size=1000000, hit_rate=0.005):
-
-    connections.connect(
-        host=host,
-        port=port,
-    )
-    collection_name = "test_text_match_perf"
-
-    if collection_name in list_collections():
-        logger.info(f"collection {collection_name} exists, drop it")
-        Collection(name=collection_name).drop()
-    dim = 128
-    analyzer_params = {
-        "tokenizer": "default",
-    }
-    fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-            FieldSchema(name="word", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="sentence", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="paragraph", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=dim)
-        ]
-    schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
-    logger.info(schema)
-    collection = Collection(name=collection_name, schema=schema)
-    index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 16, "efConstruction": 500}}
-    logger.info(f"collection {collection_name} created")
+    dim = 32
     # create dataset
     # clean all parquet
     os.makedirs("./train_data", exist_ok=True)
@@ -109,12 +83,44 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
     args_list = [(e, batch_size, dim, token_probabilities) for e in range(epoch)]
 
     # Use multiprocessing to generate and process data
-    with mp.Pool(processes=mp.cpu_count()) as pool:
+    cpu_count = mp.cpu_count()
+    logger.info(f"cpu count {cpu_count}")
+    cpu_use_count = min(cpu_count, 8)
+    t0 = time.time()
+    with mp.Pool(processes=cpu_use_count) as pool:
         results = pool.starmap(generate_and_process_batch, args_list)
     logger.info(f"files {results}")
-    
+    tt = time.time() - t0
     batch_files = glob.glob("./train_data/train*.parquet")
     logger.info(f"files {batch_files}")
+    logger.info(f"generate data time cost: {tt} s")
+
+    connections.connect(
+        host=host,
+        port=port,
+    )
+    collection_name = "test_text_match_perf"
+
+    if collection_name in list_collections():
+        logger.info(f"collection {collection_name} exists, drop it")
+        Collection(name=collection_name).drop()
+
+    analyzer_params = {
+        "tokenizer": "default",
+    }
+    fields = [
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
+            FieldSchema(name="word", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+            FieldSchema(name="sentence", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+            FieldSchema(name="paragraph", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=dim)
+        ]
+    schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
+    logger.info(schema)
+    collection = Collection(name=collection_name, schema=schema)
+    index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 16, "efConstruction": 500}}
+    logger.info(f"collection {collection_name} created")
     # copy file to minio
     client = Minio(
             f"{minio_host}:9000",
@@ -165,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument("--minio_host", type=str, default="10.104.21.211")
     parser.add_argument("--bucket_name", type=str, default="milvus-bucket")
     parser.add_argument("--port", type=int, default=19530)
-    parser.add_argument("--data_size", type=int, default=100000)
+    parser.add_argument("--data_size", type=int, default=1000_000)
     parser.add_argument("--hit_rate", type=float, default=0.005)
     args = parser.parse_args()
     prepare_data(host=args.host, port=args.port, minio_host=args.minio_host, data_size=args.data_size, bucket_name=args.bucket_name, hit_rate=args.hit_rate)
