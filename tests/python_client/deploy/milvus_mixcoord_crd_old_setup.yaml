@@ -57,6 +57,11 @@ spec:
         pvcDeletion: false
         values:
           replicaCount: 3
+          metrics:
+            enabled: true
+            podMonitor:
+              enabled: true
+              namespace: chaos-testing
     kafka:
       inCluster:
         deletionPolicy: Retain
