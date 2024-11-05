@@ -150,7 +150,7 @@ class TestOperations(TestBase):
                 log.info(f"{k} rto: {v.get_rto()}")
                 rto = v.get_rto()
                 rto_threshold = 10
-                pytest.assume(rto <= rto_threshold,  f"{k} rto expect {rto_threshold}s but get {rto}s")
+                pytest.assume(rto <= rto_threshold,  f"{self.health_checkers[k].c_name} {k} rto expect {rto_threshold}s but get {rto}s, {self.health_checkers[k].fail_records}")
 
             # if Op.insert in self.health_checkers:
             #     # verify the no insert data loss
