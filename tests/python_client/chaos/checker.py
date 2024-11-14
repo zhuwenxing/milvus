@@ -19,7 +19,7 @@ from common import common_func as cf
 from common import common_type as ct
 from common.milvus_sys import MilvusSys
 from chaos import constants
-from pymilvus import Collection
+from pymilvus import Collection, list_collections
 from common.common_type import CheckTasks
 from utils.util_log import test_log as log
 from utils.api_request import Error
@@ -625,7 +625,7 @@ class CreateChecker(Checker):
     def run_task(self):
         res, result = self.init_collection()
         if result:
-            if random.random() < 0.5:
+            if random.random() < 0.5 or len(list_collections()) > 1000:
                 self.c_wrap.drop(timeout=timeout)
         return res, result
 
