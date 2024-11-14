@@ -7,6 +7,7 @@ import threading
 import os
 import uuid
 import json
+import random
 import pandas as pd
 from datetime import datetime
 from prettytable import PrettyTable
@@ -624,7 +625,8 @@ class CreateChecker(Checker):
     def run_task(self):
         res, result = self.init_collection()
         if result:
-            self.c_wrap.drop(timeout=timeout)
+            if random.random() < 0.5:
+                self.c_wrap.drop(timeout=timeout)
         return res, result
 
     def keep_running(self):
