@@ -36,10 +36,10 @@ spec:
       resources:
         requests:
           cpu: 4
-          memory: 8Gi
+          memory: 64Gi
         limits:
           cpu: 8
-          memory: 16Gi
+          memory: 64Gi
       replicas: 1
       podAnnotations:
         pyroscope.io/application-name: "rolling-update-test-datanode"
