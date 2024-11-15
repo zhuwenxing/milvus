@@ -33,7 +33,18 @@ spec:
     proxy:
       replicas: 1
     dataNode:
-      replicas: 3
+      resources:
+        requests:
+          cpu: 4
+          memory: 8Gi
+        limits:
+          cpu: 8
+          memory: 16Gi
+      replicas: 1
+      podAnnotations:
+        pyroscope.io/application-name: "rolling-update-test-datanode"
+        pyroscope.io/port: "9091"
+        pyroscope.io/scrape: "true"
     indexNode:
       replicas: 3
     queryNode:
