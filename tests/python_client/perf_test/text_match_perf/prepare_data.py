@@ -113,10 +113,10 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
     }
     fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-            FieldSchema(name="word", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="sentence", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="paragraph", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, analyzer_params=analyzer_params),
+            FieldSchema(name="word", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, enable_analyzer=True, analyzer_params=analyzer_params),
+            FieldSchema(name="sentence", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, enable_analyzer=True, analyzer_params=analyzer_params),
+            FieldSchema(name="paragraph", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, enable_analyzer=True, analyzer_params=analyzer_params),
+            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, enable_match=True, enable_analyzer=True, analyzer_params=analyzer_params),
             FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=dim)
         ]
     schema = CollectionSchema(fields=fields, description="test collection", enable_dynamic_field=True)
