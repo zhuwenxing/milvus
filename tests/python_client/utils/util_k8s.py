@@ -1,16 +1,15 @@
 import json
 import os.path
-import time
 import pyetcd
 import requests
 from pymilvus import connections
-from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from common.milvus_sys import MilvusSys
-from utils.util_log import test_log as log
-from chaos import chaos_commons as cc
 from common.common_type import in_cluster_env
-
+import subprocess
+from utils.util_log import test_log as log
+import time
+from kubernetes import client, config
 
 def init_k8s_client_config():
     """
@@ -31,6 +30,15 @@ def get_current_namespace():
     init_k8s_client_config()
     ns = config.list_kube_config_contexts()[1]["context"]["namespace"]
     return ns
+
+
+def run_cmd(cmd):
+    log.info(f"cmd: {cmd}")
+    res = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = res.communicate()
+    output = stdout.decode("utf-8")
+    log.info(f"{cmd}\n{output}\n")
+    return output
 
 
 def wait_pods_ready(namespace, label_selector, expected_num=None, timeout=360):

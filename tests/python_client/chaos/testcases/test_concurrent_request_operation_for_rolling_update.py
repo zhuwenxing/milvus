@@ -13,7 +13,7 @@ from chaos.checker import (CreateChecker,
                            DeleteChecker,
                            BulkInsertChecker,
                            Op)
-from utils.util_k8s import wait_pods_ready
+from utils.util_k8s import wait_pods_ready, run_cmd
 from utils.util_log import test_log as log
 from chaos import chaos_commons as cc
 from common.common_type import CaseLabel
@@ -140,7 +140,8 @@ class TestOperations(TestBase):
         meta_name = config["metadata"]["name"]
         label_selector = f"app.kubernetes.io/instance={meta_name}"
         is_ready = wait_pods_ready("chaos-testing", label_selector)
-        pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}")
+        pods_info = run_cmd(f"kubectl get pods -o wide -n chaos-testing -l {label_selector}")
+        pytest.assume(is_ready is True, f"expect all pods ready but got {is_ready}\n {pods_info}")
         cc.start_monitor_threads(self.health_checkers)
         sleep(120)
         log.info("check succ rate after rolling update finished")
