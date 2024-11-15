@@ -109,7 +109,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
         Collection(name=collection_name).drop()
 
     analyzer_params = {
-        "tokenizer": "default",
+        "tokenizer": "standard",
     }
     fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),

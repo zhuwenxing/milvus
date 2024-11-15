@@ -4,7 +4,7 @@ from locust import HttpUser, task, tag, LoadTestShape
 
 class MilvusUser(HttpUser):
     host = "http://10.104.17.79:19530"
-    token_candidate = ["hello", "milvus", "vector", "database"]
+    token_candidate = "vector"
     text_match_filter = f"TextMatch(sentence, '{token_candidate}')"
     like_filter = f"sentence like '%{token_candidate}%'"
     gt = []
@@ -64,11 +64,11 @@ class StagesShape(LoadTestShape):
 
     stages = [
         {"duration": 60, "users": 1, "spawn_rate": 1},
-        {"duration": 120, "users": 200, "spawn_rate": 50},
-        {"duration": 180, "users": 300, "spawn_rate": 50},
-        {"duration": 240, "users": 400, "spawn_rate": 50},
-        {"duration": 300, "users": 500, "spawn_rate": 50},
-        {"duration": 360, "users": 600, "spawn_rate": 50, "stop": True},
+        {"duration": 120, "users": 10, "spawn_rate": 10},
+        {"duration": 180, "users": 20, "spawn_rate": 10},
+        {"duration": 240, "users": 30, "spawn_rate": 10},
+        {"duration": 300, "users": 40, "spawn_rate": 10},
+        {"duration": 360, "users": 50, "spawn_rate": 10, "stop": True},
     ]
 
     def tick(self):
