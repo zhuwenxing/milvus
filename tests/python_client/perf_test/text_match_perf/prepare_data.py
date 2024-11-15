@@ -170,9 +170,9 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare data for perf test")
-    parser.add_argument("--host", type=str, default="10.104.17.79")
-    parser.add_argument("--minio_host", type=str, default="10.104.21.211")
-    parser.add_argument("--bucket_name", type=str, default="milvus-bucket")
+    parser.add_argument("--host", type=str, default="10.104.1.205")
+    parser.add_argument("--minio_host", type=str, default="10.104.30.236")
+    parser.add_argument("--bucket_name", type=str, default="beir-benchmark")
     parser.add_argument("--port", type=int, default=19530)
     parser.add_argument("--data_size", type=int, default=1000_000)
     args = parser.parse_args()
