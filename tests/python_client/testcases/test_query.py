@@ -4766,6 +4766,143 @@ class TestQueryTextMatch(TestcaseBase):
 
 
 
+    @pytest.mark.tags(CaseLabel.L0)
+    @pytest.mark.parametrize("enable_partition_key", [True, False])
+    @pytest.mark.parametrize("enable_inverted_index", [True, False])
+    @pytest.mark.parametrize("lang_type", ["chinese"])
+    def test_query_text_match_zh_en_mix(
+            self, lang_type, enable_inverted_index, enable_partition_key
+    ):
+        """
+        target: test text match normal
+        method: 1. enable text match and insert data with varchar
+                2. get the most common words and query with text match
+                3. verify the result
+        expected: text match successfully and result is correct
+        """
+        analyzer_params = {
+            "type": lang_type,
+        }
+        dim = 128
+        fields = [
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
+            FieldSchema(
+                name="word",
+                dtype=DataType.VARCHAR,
+                max_length=65535,
+                enable_analyzer=True,
+                enable_match=True,
+                is_partition_key=enable_partition_key,
+                analyzer_params=analyzer_params,
+            ),
+            FieldSchema(
+                name="sentence",
+                dtype=DataType.VARCHAR,
+                max_length=65535,
+                enable_analyzer=True,
+                enable_match=True,
+                analyzer_params=analyzer_params,
+            ),
+            FieldSchema(
+                name="paragraph",
+                dtype=DataType.VARCHAR,
+                max_length=65535,
+                enable_analyzer=True,
+                enable_match=True,
+                analyzer_params=analyzer_params,
+            ),
+            FieldSchema(
+                name="text",
+                dtype=DataType.VARCHAR,
+                max_length=65535,
+                enable_analyzer=True,
+                enable_match=True,
+                analyzer_params=analyzer_params,
+            ),
+            FieldSchema(name="emb", dtype=DataType.FLOAT_VECTOR, dim=dim),
+        ]
+        schema = CollectionSchema(fields=fields, description="test collection")
+        data_size = 3000
+        collection_w = self.init_collection_wrap(
+            name=cf.gen_unique_str(prefix), schema=schema
+        )
+        fake = fake_en
+        if lang_type == "chinese":
+            language = "zh"
+            fake = fake_zh
+        else:
+            language = "en"
+
+        data = [
+            {
+                "id": i,
+                "word": fake.word().lower() + " " + fake_en.word().lower(),
+                "sentence": fake.sentence().lower() + " " + fake_en.sentence().lower(),
+                "paragraph": fake.paragraph().lower() + " " + fake_en.paragraph().lower(),
+                "text": fake.text().lower() + " " + fake_en.text().lower(),
+                "emb": [random.random() for _ in range(dim)],
+            }
+            for i in range(data_size)
+        ]
+        df = pd.DataFrame(data)
+        log.info(f"dataframe\n{df}")
+        batch_size = 5000
+        for i in range(0, len(df), batch_size):
+            collection_w.insert(
+                data[i: i + batch_size]
+                if i + batch_size < len(df)
+                else data[i: len(df)]
+            )
+        # only if the collection is flushed, the inverted index ca be applied.
+        # growing segment may be not applied, although in strong consistency.
+        collection_w.flush()
+        collection_w.create_index(
+            "emb",
+            {"index_type": "IVF_SQ8", "metric_type": "L2", "params": {"nlist": 64}},
+        )
+        if enable_inverted_index:
+            collection_w.create_index("word", {"index_type": "INVERTED"})
+        collection_w.load()
+        # analyze the croup
+        text_fields = ["word", "sentence", "paragraph", "text"]
+        wf_map = {}
+        for field in text_fields:
+            wf_map[field] = cf.analyze_documents(df[field].tolist(), language=language)
+        # query single field for one token
+        for field in text_fields:
+            token = wf_map[field].most_common()[0][0]
+            expr = f"text_match({field}, '{token}')"
+            log.info(f"expr: {expr}")
+            res, _ = collection_w.query(expr=expr, output_fields=["id", field])
+            assert len(res) > 0
+            log.info(f"res len {len(res)}")
+            for r in res:
+                assert token in r[field]
+
+            # verify inverted index
+            if enable_inverted_index:
+                if field == "word":
+                    expr = f"{field} == '{token}'"
+                    log.info(f"expr: {expr}")
+                    res, _ = collection_w.query(expr=expr, output_fields=["id", field])
+                    log.info(f"res len {len(res)}")
+                    for r in res:
+                        assert r[field] == token
+        # query single field for multi-word
+        for field in text_fields:
+            # match top 10 most common words
+            top_10_tokens = []
+            for word, count in wf_map[field].most_common(10):
+                top_10_tokens.append(word)
+            string_of_top_10_words = " ".join(top_10_tokens)
+            expr = f"text_match({field}, '{string_of_top_10_words}')"
+            log.info(f"expr {expr}")
+            res, _ = collection_w.query(expr=expr, output_fields=["id", field])
+            log.info(f"res len {len(res)}")
+            for r in res:
+                assert any([token in r[field] for token in top_10_tokens]), f"top 10 tokens {top_10_tokens} not in {r[field]}"
+
+
     @pytest.mark.skip("unimplemented")
     @pytest.mark.tags(CaseLabel.L0)
     def test_query_text_match_custom_analyzer(self):
