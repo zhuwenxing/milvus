@@ -92,6 +92,8 @@ spec:
             node_exporter: false
             alert_manager: false
           proxy:
+            podMonitor:
+              enabled: true
             replicaCount: 1
             resources:
               requests:
@@ -103,6 +105,8 @@ spec:
               PULSAR_GC: >
                 -XX:MaxDirectMemorySize=256m
           bookkeeper:
+            podMonitor:
+              enabled: true
             replicaCount: 2
             resources:
               requests:
@@ -129,6 +133,8 @@ spec:
                 -XX:+PerfDisableSharedMem
                 -XX:+PrintGCDetails
           zookeeper:
+            podMonitor:
+              enabled: true
             replicaCount: 1
             resources:
               requests:
@@ -147,6 +153,8 @@ spec:
                 -XX:+PerfDisableSharedMem
                 -Dzookeeper.forceSync=no
           broker:
+            podMonitor:
+              enabled: true
             replicaCount: 1
             resources:
               requests:
