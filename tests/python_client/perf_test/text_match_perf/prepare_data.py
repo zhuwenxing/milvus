@@ -176,7 +176,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare data for perf test")
     parser.add_argument("--host", type=str, default="10.104.19.68")
     parser.add_argument("--minio_host", type=str, default="10.104.19.155")
-    parser.add_argument("--bucket_name", type=str, default="fts-jieba-verification")
+    parser.add_argument("--bucket_name", type=str, default="milvus-bucket")
     parser.add_argument("--port", type=int, default=19530)
     parser.add_argument("--data_size", type=int, default=100_000)
     args = parser.parse_args()
