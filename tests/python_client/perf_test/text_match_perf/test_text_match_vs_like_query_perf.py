@@ -1,24 +1,25 @@
-from locust import HttpUser, task, tag, LoadTestShape
+from locust import HttpUser, task, tag, LoadTestShape, events
+
+@events.init_command_line_parser.add_listener
+def _(parser):
+    parser.add_argument("--token_candidate", type=str, env_var="TOKEN", default="vector", help="word for text match")
 
 
+@events.test_start.add_listener
+def _(environment, **kw):
+    print(f"Custom argument supplied: {environment.parsed_options.token_candidate}")
 
 class MilvusUser(HttpUser):
     host = "http://10.104.1.205:19530"
-    token_candidate = "vector"
-    text_match_filter = f"text_match(sentence, '{token_candidate}')"
-    like_filter = f"sentence like '%{token_candidate}%'"
-    gt = []
-    recall_list = []
-    ts_list = []
-    recall = 0
 
     @tag('text_match')
     @task
     def query_with_text_match(self):
+        text_match_filter = f"text_match(sentence, '{self.environment.parsed_options.token_candidate}')"
         with self.client.post("/v2/vectordb/entities/query",
                               json={"collectionName": "test_text_match_perf",
                                     "outputFields": ["id"],
-                                    "filter": self.text_match_filter,
+                                    "filter": text_match_filter,
                                     "limit": 1000
                                     },
                               headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},
@@ -33,10 +34,11 @@ class MilvusUser(HttpUser):
     @tag('like')
     @task
     def query_with_like(self):
+        like_filter = f"sentence like '%{self.environment.parsed_options.token_candidate}%'"
         with self.client.post("/v2/vectordb/entities/query",
                               json={"collectionName": "test_text_match_perf",
                                     "outputFields": ["id"],
-                                    "filter": self.like_filter,
+                                    "filter": like_filter,
                                     "limit": 1000
                                     },
                               headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},
@@ -80,3 +82,4 @@ class StagesShape(LoadTestShape):
                 return tick_data
 
         return None
+
