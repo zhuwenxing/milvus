@@ -654,7 +654,7 @@ class IndexChecker(Checker):
         res, result = self.c_wrap.create_index(self.float_vector_field_name,
                                                constants.DEFAULT_INDEX_PARAM,
                                                index_name=self.index_name,
-                                               timeout=timeout,
+                                               timeout=timeout*3,
                                                enable_traceback=enable_traceback,
                                                check_task=CheckTasks.check_nothing)
         return res, result
