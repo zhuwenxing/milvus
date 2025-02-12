@@ -1,0 +1,31 @@
+"""Constants for performance testing."""
+
+# Test configuration
+HOST = "http://10.104.25.110:19530"
+TEST_DURATION = 100  # 10 minutes for progressive test
+FIXED_TEST_DURATION = 60  # 5 minutes for fixed user test
+FIXED_USERS = 50  # Default number of users for fixed test mode
+COOLDOWN_TIME = 60  # Time to wait between tests in seconds
+
+# Test phrases with their probabilities
+TEST_PHRASES = [
+    "vector similarity",
+    # "milvus search",
+    # "nearest neighbor search",
+    # "high dimensional vector index",
+]
+
+# Test modes
+MODE_PROGRESSIVE = "progressive"
+MODE_FIXED = "fixed"
+
+# Test tags
+TAG_PHRASE_MATCH = "phrase_match"
+TAG_LIKE = "like"
+
+# Results directories
+RESULTS_DIR = "results"
+HTML_RESULTS_DIR = "results/html"
+
+# Number of worker processes for Locust
+PROCESS_COUNT = 4  # Adjust this based on your CPU cores
