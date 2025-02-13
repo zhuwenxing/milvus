@@ -1,25 +1,37 @@
 import gevent.monkey
+
 gevent.monkey.patch_all()
 import grpc.experimental.gevent as grpc_gevent
+
 grpc_gevent.init_gevent()
 
 
 from locust import User, events, task, constant_throughput, tag
 from locust.runners import MasterRunner, WorkerRunner
-from pymilvus import (connections, Collection, FieldSchema, CollectionSchema, DataType, FunctionType,
-                      Function)
+from pymilvus import (
+    connections,
+    Collection,
+    FieldSchema,
+    CollectionSchema,
+    DataType,
+    FunctionType,
+    Function,
+)
 import numpy as np
 import time
 import logging
 from faker import Faker
+import random
+
 faker = Faker()
 
 PHRASE_PROBABILITIES = {
-    "vector_similarity": 0.1,        # Most common phrase
-    "milvus_search": 0.01,         # Medium frequency phrase
+    "vector_similarity": 0.1,  # Most common phrase
+    "milvus_search": 0.01,  # Medium frequency phrase
     "nearest_neighbor_search": 0.001,  # Less common phrase
     "high_dimensional_vector_index": 0.0001,  # Rare phrase
 }
+
 
 def gen_text(phrase_probabilities):
     for phrase, prob in phrase_probabilities.items():
@@ -39,16 +51,26 @@ def setup_collection(environment):
     # 获取配置参数
     collection_name = environment.parsed_options.milvus_collection
     reindex = environment.parsed_options.reindex == "true"
-    logger.info(f"Collection name: {collection_name}, reindex: {reindex} {type(reindex)}")
+    logger.info(
+        f"Collection name: {collection_name}, reindex: {reindex} {type(reindex)}"
+    )
     connections.connect(uri=environment.host)
-    analyzer_params = {
-        "type": "standard"
-    }
+    analyzer_params = {"type": "standard"}
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=25536,
-                    enable_analyzer=True, analyzer_params=analyzer_params, enable_match=True),
-        FieldSchema(name="dense_emb", dtype=DataType.FLOAT_VECTOR, dim=environment.parsed_options.milvus_dim),
+        FieldSchema(
+            name="text",
+            dtype=DataType.VARCHAR,
+            max_length=25536,
+            enable_analyzer=True,
+            analyzer_params=analyzer_params,
+            enable_match=True,
+        ),
+        FieldSchema(
+            name="dense_emb",
+            dtype=DataType.FLOAT_VECTOR,
+            dim=environment.parsed_options.milvus_dim,
+        ),
         FieldSchema(name="sparse", dtype=DataType.SPARSE_FLOAT_VECTOR),
     ]
     schema = CollectionSchema(fields=fields, description="beir test collection")
@@ -64,7 +86,7 @@ def setup_collection(environment):
 
     # 创建索引
     indexes = [index.to_dict() for index in collection.indexes]
-    indexed_fields = [index['field'] for index in indexes]
+    indexed_fields = [index["field"] for index in indexes]
     if ("sparse" not in indexed_fields) or reindex:
         logger.info("Creating sparse index")
         collection.create_index(
@@ -75,17 +97,13 @@ def setup_collection(environment):
                 "params": {
                     "bm25_k1": 1.5,
                     "bm25_b": 0.75,
-                }
-            }
+                },
+            },
         )
     if ("dense_emb" not in indexed_fields) or reindex:
         logger.info("Creating dense index")
         collection.create_index(
-            "dense_emb",
-            {
-                "index_type": "HNSW",
-                "metric_type": "COSINE"
-            }
+            "dense_emb", {"index_type": "HNSW", "metric_type": "COSINE"}
         )
     logger.info("Loading collection")
     collection.load()
@@ -137,6 +155,7 @@ def wait_for_setup(environment):
 
 class MilvusBaseUser(User):
     """Base Milvus user class that handles common functionality"""
+
     abstract = True
 
     def __init__(self, environment):
@@ -184,14 +203,14 @@ class MilvusBaseUser(User):
 class MilvusUser(MilvusBaseUser):
     """Main Milvus user class that defines the test tasks"""
 
-    @tag('insert')
+    @tag("insert")
     @task(4)
     def insert(self):
         """Insert random vectors"""
         batch_size = 1000
         data = [
             {
-                "id": int(time.time()*(10**6)),
+                "id": int(time.time() * (10**6)),
                 "text": gen_text(PHRASE_PROBABILITIES),
                 "dense_emb": self._random_vector(),
             }
@@ -200,30 +219,33 @@ class MilvusUser(MilvusBaseUser):
 
         self.client.insert(data)
 
-    @tag('sparse', 'search')
+    @tag("sparse", "search")
     @task(4)
     def full_text_search(self):
         """full text search"""
         search_data = [faker.text(max_nb_chars=300)]
         logger.debug("Performing sparse vector search")
-        self.client.search(data=search_data,
-                           anns_field="sparse",
-                           top_k=self.top_k,
-                           search_type="full-text-search"
-                           )
+        self.client.search(
+            data=search_data,
+            anns_field="sparse",
+            top_k=self.top_k,
+            search_type="full-text-search",
+        )
 
-    @tag('dense', 'search')
+    @tag("dense", "search")
     @task(4)
     def dense_search(self):
         """full text search"""
         logger.debug("Performing dense vector search")
         search_data = [self._random_vector()]
-        self.client.search(data=search_data,
-                           anns_field="dense_emb",
-                           top_k=self.top_k,
-                           search_type="dense-search")
+        self.client.search(
+            data=search_data,
+            anns_field="dense_emb",
+            top_k=self.top_k,
+            search_type="dense-search",
+        )
 
-    @tag('text_match', 'query')
+    @tag("text_match", "query")
     @task(2)
     def text_match(self):
         """Text Match"""
@@ -232,7 +254,7 @@ class MilvusUser(MilvusBaseUser):
         logger.debug("Performing query")
         self.client.query(expr=expr)
 
-    @tag('phrase_match', 'query')
+    @tag("phrase_match", "query")
     @task(2)
     def phrase_match(self):
         """Phrase Match"""
@@ -242,13 +264,12 @@ class MilvusUser(MilvusBaseUser):
         logger.debug("Performing query")
         self.client.query(expr=expr)
 
-
-    @tag('delete')
+    @tag("delete")
     @task(1)
     def delete(self):
         """delete random vectors in 30s window before 10 minutes"""
-        _min = int((time.time()-600)*(10**6))
-        _max = int((time.time()-530)*(10**6))
+        _min = int((time.time() - 600) * (10**6))
+        _max = int((time.time() - 530) * (10**6))
 
         expr = f"id >= {_min} and id <= {_max}"
 
@@ -275,7 +296,7 @@ class MilvusORMClient:
                 name="Insert",
                 response_time=total_time,
                 response_length=0,
-                exception=None
+                exception=None,
             )
             self.sleep_time = 0.1
         except Exception as e:
@@ -288,10 +309,18 @@ class MilvusORMClient:
                     name="Insert",
                     response_time=(time.time() - start) * 1000,
                     response_length=0,
-                    exception=e
+                    exception=e,
                 )
 
-    def search(self, data, anns_field, top_k, param=None, output_fields=None, search_type="dense-search"):
+    def search(
+        self,
+        data,
+        anns_field,
+        top_k,
+        param=None,
+        output_fields=None,
+        search_type="dense-search",
+    ):
         if param is None:
             param = {}
         if output_fields is None:
@@ -304,7 +333,7 @@ class MilvusORMClient:
                 anns_field=anns_field,
                 param=param,
                 limit=top_k,
-                output_fields=output_fields
+                output_fields=output_fields,
             )
             total_time = (time.time() - start) * 1000
             for r in res:
@@ -317,7 +346,7 @@ class MilvusORMClient:
                 name=name,
                 response_time=total_time,
                 response_length=0,
-                exception=None
+                exception=None,
             )
         except Exception as e:
             logger.error(f"Search error: {str(e)}")
@@ -326,7 +355,7 @@ class MilvusORMClient:
                 name=name,
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
-                exception=e
+                exception=e,
             )
 
     def query(self, expr, output_fields=None):
@@ -334,10 +363,7 @@ class MilvusORMClient:
             output_fields = ["id"]
         start = time.time()
         try:
-            res = self.collection.query(
-                expr=expr,
-                output_fields=output_fields
-            )
+            res = self.collection.query(expr=expr, output_fields=output_fields)
             total_time = (time.time() - start) * 1000
             if len(res) == 0:
                 logger.warning("No results found")
@@ -347,7 +373,7 @@ class MilvusORMClient:
                 name="Query",
                 response_time=total_time,
                 response_length=0,
-                exception=None
+                exception=None,
             )
         except Exception as e:
             logger.error(f"Query error: {str(e)}")
@@ -356,7 +382,7 @@ class MilvusORMClient:
                 name="Query",
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
-                exception=e
+                exception=e,
             )
 
     def delete(self, expr):
@@ -369,7 +395,7 @@ class MilvusORMClient:
                 name="Delete",
                 response_time=total_time,
                 response_length=0,
-                exception=None
+                exception=None,
             )
         except Exception as e:
             logger.error(f"Delete error: {str(e)}")
@@ -378,7 +404,7 @@ class MilvusORMClient:
                 name="Delete",
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
-                exception=e
+                exception=e,
             )
 
 
@@ -386,19 +412,43 @@ class MilvusORMClient:
 @events.init_command_line_parser.add_listener
 def _(parser):
     milvus_options = parser.add_argument_group("Milvus-specific options")
-    milvus_options.add_argument("--milvus-topk", type=int, metavar="<int>", default=10,
-                                help="Number of results to return from a Milvus search request. Defaults to 10.")
-    milvus_options.add_argument("--milvus-mode", choices=["rest", "orm", "client"],
-                                default="orm",
-                                help="How to connect to Milvus (default: %(default)s)")
-    milvus_options.add_argument("--milvus-dim", type=int, default=128,
-                                help="Vector dimension for the collection (default: %(default)s)")
-    milvus_options.add_argument("--milvus-collection", type=str, default="test_collection",
-                                help="Collection name to use (default: %(default)s)")
-    milvus_options.add_argument("--milvus-nlist", type=int, default=1024,
-                                help="Number of cluster units (default: %(default)s)")
-    milvus_options.add_argument("--milvus-throughput-per-user", type=float, default=0,
-                                help="How many requests per second each user should issue (default: %(default)s)")
-    milvus_options.add_argument("--reindex", type=str, default="false",
-                                help=" reindex (default: %(default)s)")
-
+    milvus_options.add_argument(
+        "--milvus-topk",
+        type=int,
+        metavar="<int>",
+        default=10,
+        help="Number of results to return from a Milvus search request. Defaults to 10.",
+    )
+    milvus_options.add_argument(
+        "--milvus-mode",
+        choices=["rest", "orm", "client"],
+        default="orm",
+        help="How to connect to Milvus (default: %(default)s)",
+    )
+    milvus_options.add_argument(
+        "--milvus-dim",
+        type=int,
+        default=128,
+        help="Vector dimension for the collection (default: %(default)s)",
+    )
+    milvus_options.add_argument(
+        "--milvus-collection",
+        type=str,
+        default="test_collection",
+        help="Collection name to use (default: %(default)s)",
+    )
+    milvus_options.add_argument(
+        "--milvus-nlist",
+        type=int,
+        default=1024,
+        help="Number of cluster units (default: %(default)s)",
+    )
+    milvus_options.add_argument(
+        "--milvus-throughput-per-user",
+        type=float,
+        default=0,
+        help="How many requests per second each user should issue (default: %(default)s)",
+    )
+    milvus_options.add_argument(
+        "--reindex", type=str, default="false", help=" reindex (default: %(default)s)"
+    )
