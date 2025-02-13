@@ -34,7 +34,6 @@ def run_test(phrase: str, tag: str, mode: str, duration: int, host: str = HOST) 
         "-f", "test_phrase_match_vs_like_query.py",
         "--headless",
         "--only-summary",
-        f"--csv={RESULTS_DIR}/{test_name}",
         f"--html={HTML_RESULTS_DIR}/{test_name}.html",
         "--tags", tag,
         "--phrase-candidate", phrase,
