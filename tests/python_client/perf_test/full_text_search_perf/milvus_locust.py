@@ -14,6 +14,19 @@ import logging
 from faker import Faker
 faker = Faker()
 
+PHRASE_PROBABILITIES = {
+    "vector_similarity": 0.1,        # Most common phrase
+    "milvus_search": 0.01,         # Medium frequency phrase
+    "nearest_neighbor_search": 0.001,  # Less common phrase
+    "high_dimensional_vector_index": 0.0001,  # Rare phrase
+}
+
+def gen_text(phrase_probabilities):
+    for phrase, prob in phrase_probabilities.items():
+        if np.random.rand() < prob:
+            return phrase + " " + faker.sentence()
+    return faker.sentence()
+
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -179,7 +192,7 @@ class MilvusUser(MilvusBaseUser):
         data = [
             {
                 "id": int(time.time()*(10**6)),
-                "text": faker.text(max_nb_chars=300),
+                "text": gen_text(PHRASE_PROBABILITIES),
                 "dense_emb": self._random_vector(),
             }
             for _ in range(batch_size)
@@ -218,6 +231,17 @@ class MilvusUser(MilvusBaseUser):
         expr = f"TEXT_MATCH(text, '{search_data}')"
         logger.debug("Performing query")
         self.client.query(expr=expr)
+
+    @tag('phrase_match', 'query')
+    @task(2)
+    def phrase_match(self):
+        """Phrase Match"""
+        slop = random.randint(0, 3)
+        search_data = random.choice(list(PHRASE_PROBABILITIES.keys()))
+        expr = f"PHRASE_MATCH(text, '{search_data}', {slop})"
+        logger.debug("Performing query")
+        self.client.query(expr=expr)
+
 
     @tag('delete')
     @task(1)
