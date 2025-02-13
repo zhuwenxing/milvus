@@ -24,7 +24,7 @@ TAG_PHRASE_MATCH = "phrase_match"
 TAG_LIKE = "like"
 
 # Results directories
-RESULTS_DIR = "/Users/zilliz/Downloads/tmp/ci_logs/results"
+RESULTS_DIR = "/tmp/ci_logs/results"
 HTML_RESULTS_DIR = "/tmp/ci_logs/results/html"
 
 # Number of worker processes for Locust
