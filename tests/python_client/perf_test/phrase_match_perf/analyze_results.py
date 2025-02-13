@@ -1,6 +1,7 @@
 import pandas as pd
-import glob
 import os
+
+from constants import RESULTS_DIR
 
 # Define phrase probabilities mapping
 phrase_probabilities = {
@@ -13,14 +14,14 @@ phrase_probabilities = {
 def get_qps(phrase, expr_type, load_type):
     if load_type == "progressive":
         phrase_new = phrase.replace(" ", "_")
-        filename = f"results/{phrase_new}_{expr_type}_progressive_stats_history.csv"
+        filename = f"{RESULTS_DIR}/{phrase_new}_{expr_type}_progressive_stats_history.csv"
         if not os.path.exists(filename):
             return None
         df = pd.read_csv(filename)
         return df["Requests/s"].max()
     if load_type == "fixed":
         phrase_new = phrase.replace(" ", "_")
-        filename = f"results/{phrase_new}_{expr_type}_fixed_stats.csv"
+        filename = f"{RESULTS_DIR}/{phrase_new}_{expr_type}_fixed_stats.csv"
         if not os.path.exists(filename):
             return None
         df = pd.read_csv(filename)
