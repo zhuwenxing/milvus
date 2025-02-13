@@ -24,8 +24,8 @@ TAG_PHRASE_MATCH = "phrase_match"
 TAG_LIKE = "like"
 
 # Results directories
-RESULTS_DIR = "results"
-HTML_RESULTS_DIR = "results/html"
+RESULTS_DIR = "/tmp/ci_logs/results"
+HTML_RESULTS_DIR = "/tmp/ci_logs/results/html"
 
 # Number of worker processes for Locust
 PROCESS_COUNT = 4  # Adjust this based on your CPU cores
