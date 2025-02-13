@@ -8,12 +8,12 @@ FIXED_USERS = 50  # Default number of users for fixed test mode
 COOLDOWN_TIME = 60  # Time to wait between tests in seconds
 
 # Test phrases with their probabilities
-TEST_PHRASES = [
-    "vector similarity",
-    "milvus search",
-    "nearest neighbor search",
-    "high dimensional vector index",
-]
+TEST_PHRASES = {
+    "vector similarity": 0.1,        # Most common phrase
+    "milvus search": 0.01,         # Medium frequency phrase
+    "nearest neighbor": 0.001,  # Less common phrase
+    "high dimensional": 0.0001,  # Rare phrase
+}
 
 # Test modes
 MODE_PROGRESSIVE = "progressive"

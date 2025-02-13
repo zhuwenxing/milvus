@@ -65,7 +65,7 @@ def main():
     host = args.host
     # Phase 1: Progressive load tests
     print("Phase 1: Running progressive load tests to find optimal QPS")
-    for phrase in TEST_PHRASES:
+    for phrase in TEST_PHRASES.keys():
         run_test(phrase, TAG_PHRASE_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
         run_test(phrase, TAG_LIKE, MODE_PROGRESSIVE, TEST_DURATION, host=host)
         print(f"Cooling down for {COOLDOWN_TIME} seconds...")
@@ -73,7 +73,7 @@ def main():
 
     # Phase 2: Fixed user tests
     print("Phase 2: Running fixed user tests for performance comparison")
-    for phrase in TEST_PHRASES:
+    for phrase in TEST_PHRASES.keys():
         run_test(phrase, TAG_PHRASE_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
         run_test(phrase, TAG_LIKE, MODE_FIXED, FIXED_TEST_DURATION, host=host)
         print(f"Cooling down for {COOLDOWN_TIME} seconds...")

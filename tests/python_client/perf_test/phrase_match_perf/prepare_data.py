@@ -7,6 +7,7 @@ from pymilvus import (
     FieldSchema, CollectionSchema, DataType,
     Collection, BulkInsertState, utility
 )
+from constants import TEST_PHRASES
 
 import time
 import argparse
@@ -92,12 +93,7 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
     batch_size = 100000
     epoch = data_size // batch_size
     # Define test phrases with their probabilities
-    phrase_probabilities = {
-        "vector similarity": 0.1,        # Most common phrase
-        "milvus search": 0.01,         # Medium frequency phrase
-        "nearest neighbor search": 0.001,  # Less common phrase
-        "high dimensional vector index": 0.0001,  # Rare phrase
-    }
+    phrase_probabilities = TEST_PHRASES
     # Prepare arguments for multiprocessing
     args_list = [(e, batch_size, dim, phrase_probabilities) for e in range(epoch)]
 

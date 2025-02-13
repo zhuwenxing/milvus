@@ -4,13 +4,10 @@ import re
 import pandas as pd
 from constants import RESULTS_DIR
 
-# Define phrase probabilities mapping
-phrase_probabilities = {
-    "vector_similarity": 0.1,        # Most common phrase
-    "milvus_search": 0.01,         # Medium frequency phrase
-    "nearest_neighbor_search": 0.001,  # Less common phrase
-    "high_dimensional_vector_index": 0.0001,  # Rare phrase
-}
+from constants import TEST_PHRASES
+
+# Use TEST_PHRASES as phrase probabilities mapping
+phrase_probabilities = TEST_PHRASES
 
 def extract_json_from_html(html_content):
     # Find content between <script> tags
@@ -88,7 +85,7 @@ for phrase, hit_rate in phrase_probabilities.items():
 df = pd.DataFrame(results)
 df = df[["expr", "hit_rate", "qps", "load_type"]]
 
-df.to_csv("results/qps_comparison_all.csv", index=False)
+df.to_csv(RESULTS_DIR + "/qps_comparison_all.csv", index=False)
 
 print("\nQPS Comparison Results:")
 print(df)
