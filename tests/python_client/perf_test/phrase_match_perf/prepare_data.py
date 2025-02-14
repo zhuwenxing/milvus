@@ -7,7 +7,7 @@ from pymilvus import (
     FieldSchema, CollectionSchema, DataType,
     Collection, BulkInsertState, utility
 )
-from constants import TEST_PHRASES
+from constants import TEST_PHRASES, RESULTS_DIR
 
 import time
 import argparse
@@ -15,6 +15,7 @@ from loguru import logger
 from faker import Faker
 import random
 import multiprocessing as mp
+from typing import Dict, List
 
 def clean_and_reinsert_phrases(df, phrase_probabilities):
     text_columns = ['word', 'sentence']
@@ -75,9 +76,68 @@ def generate_and_process_batch(e, batch_size, dim, phrase_probabilities):
     logger.info(f"dataframe\n {df}")
     df.to_parquet(f"./train_data/train-{e}.parquet")
     logger.info(f"progress: {e+1}")
-    return f"./train_data/train-{e}.parquet"
+    return f"./train_data/train-{e}.parquet", df
 
 
+
+def analyze_and_save_sentence_distributions(dfs: List[pd.DataFrame], output_dir: str = os.path.join(RESULTS_DIR, "train_data_analysis")) -> Dict:
+    """Analyze the distribution of sentence lengths and word counts in the dataset and save to CSV.
+    
+    Args:
+        dfs: List of DataFrames containing 'sentence' column
+        output_dir: Directory to save the analysis results
+        
+    Returns:
+        Dictionary containing statistics for sentence metrics
+    """
+    # Combine all dataframes
+    combined_df = pd.concat(dfs, ignore_index=True)
+    
+    # Ensure base results directory exists
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    # Create analysis directory
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info(f"Analysis results will be saved to: {output_dir}")
+    
+    # Define metrics to analyze
+    metrics = {
+        'sentence_length': combined_df['sentence'].str.len(),
+        'sentence_word_count': combined_df['sentence'].str.split().str.len()
+    }
+    
+    stats = {}
+    # Calculate statistics and save distributions
+    for metric_name, metric_data in metrics.items():
+        # Calculate basic statistics
+        stats[metric_name] = {
+            'mean': metric_data.mean(),
+            'std': metric_data.std(),
+            'min': metric_data.min(),
+            'max': metric_data.max(),
+        }
+        
+        # Get distribution and save to CSV
+        distribution_df = pd.DataFrame(
+            metric_data.value_counts().sort_index()
+        ).reset_index()
+        distribution_df.columns = [metric_name, 'count']
+        
+        # Save distribution to CSV
+        csv_path = os.path.join(output_dir, f'{metric_name}_distribution.csv')
+        distribution_df.to_csv(csv_path, index=False)
+        
+        # Print distribution summary
+        logger.info(f"\n{metric_name.replace('_', ' ').title()} Distribution Summary:")
+        logger.info(f"Total samples: {len(metric_data)}")
+        logger.info(f"Mean: {stats[metric_name]['mean']:.2f}")
+        logger.info(f"Std: {stats[metric_name]['std']:.2f}")
+        logger.info(f"Min: {stats[metric_name]['min']}")
+        logger.info(f"Max: {stats[metric_name]['max']}")
+        logger.info(f"Distribution saved to: {csv_path}")
+        logger.info("\nTop 10 most common values:")
+        logger.info(distribution_df.sort_values(by='count', ascending=False).head(10).to_string(index=False))
+    
+    return stats
 
 def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_name="milvus-bucket", data_size=1000000):
     dim = 32
@@ -99,12 +159,20 @@ def prepare_data(host="127.0.0.1", port=19530, minio_host="127.0.0.1", bucket_na
 
     # Use multiprocessing to generate and process data
     cpu_count = mp.cpu_count()
+    all_dfs = []
     logger.info(f"cpu count {cpu_count}")
     cpu_use_count = min(cpu_count, 8)
     t0 = time.time()
     with mp.Pool(processes=cpu_use_count) as pool:
         results = pool.starmap(generate_and_process_batch, args_list)
-    logger.info(f"files {results}")
+        # Separate file paths and dataframes
+        file_paths, dataframes = zip(*results)
+        all_dfs.extend(dataframes)
+        
+        # Analyze data distributions
+        logger.info("\nAnalyzing data distributions...")
+        stats = analyze_and_save_sentence_distributions(all_dfs)
+    logger.info(f"files {file_paths}")
     tt = time.time() - t0
     batch_files = glob.glob("./train_data/train*.parquet")
     logger.info(f"files {batch_files}")
