@@ -28,4 +28,4 @@ RESULTS_DIR = "/tmp/ci_logs/results"
 HTML_RESULTS_DIR = "/tmp/ci_logs/results/html"
 
 # Number of worker processes for Locust
-PROCESS_COUNT = -1  # Adjust this based on your CPU cores or -1 for auto detection
+PROCESS_COUNT = 8  # Adjust this based on your CPU cores or -1 for auto detection

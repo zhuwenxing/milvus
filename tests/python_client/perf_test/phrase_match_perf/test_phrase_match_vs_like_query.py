@@ -124,7 +124,7 @@ class StagesShape(LoadTestShape):
                 logger.info(f"Stage {i}: {stage}")
         else:
             # Fixed user test for steady-state performance
-            fixed_users = int(os.getenv("FIXED_USERS", "50"))
+            fixed_users = int(os.getenv("FIXED_USERS", "1"))
             warmup_time = int(self.test_time * 0.1)  # 10% of time for warmup
 
             self.stages = [
