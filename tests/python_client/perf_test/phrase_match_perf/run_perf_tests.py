@@ -64,23 +64,33 @@ def main():
     args = parse_args()
     host = args.host
 
-    # Phase 1: Progressive load tests
-    print("Phase 1: Running progressive load tests to find optimal QPS")
-    for phrase in TEST_PHRASES.keys():
-        run_test(phrase, TAG_TEXT_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
-        run_test(phrase, TAG_PHRASE_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
-        run_test(phrase, TAG_LIKE, MODE_PROGRESSIVE, TEST_DURATION, host=host)
-        print(f"Cooling down for {COOLDOWN_TIME} seconds...")
-        time.sleep(COOLDOWN_TIME)
+    expr_tags = [TAG_TEXT_MATCH, TAG_PHRASE_MATCH, TAG_LIKE]
+    load_types = [MODE_PROGRESSIVE, MODE_FIXED]
 
-    # Phase 2: Fixed user tests
-    print("Phase 2: Running fixed user tests for performance comparison")
     for phrase in TEST_PHRASES.keys():
-        run_test(phrase, TAG_TEXT_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
-        run_test(phrase, TAG_PHRASE_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
-        run_test(phrase, TAG_LIKE, MODE_FIXED, FIXED_TEST_DURATION, host=host)
-        print(f"Cooling down for {COOLDOWN_TIME} seconds...")
-        time.sleep(COOLDOWN_TIME)
+        for expr_tag in expr_tags:
+            for load_type in load_types:
+                run_test(phrase, expr_tag, load_type, TEST_DURATION, host=host)
+                print(f"Cooling down for {COOLDOWN_TIME} seconds...")
+                time.sleep(COOLDOWN_TIME)
+
+    # # Phase 1: Progressive load tests
+    # print("Phase 1: Running progressive load tests to find optimal QPS")
+    # for phrase in TEST_PHRASES.keys():
+    #     run_test(phrase, TAG_TEXT_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
+    #     run_test(phrase, TAG_PHRASE_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
+    #     run_test(phrase, TAG_LIKE, MODE_PROGRESSIVE, TEST_DURATION, host=host)
+    #     print(f"Cooling down for {COOLDOWN_TIME} seconds...")
+    #     time.sleep(COOLDOWN_TIME)
+
+    # # Phase 2: Fixed user tests
+    # print("Phase 2: Running fixed user tests for performance comparison")
+    # for phrase in TEST_PHRASES.keys():
+    #     run_test(phrase, TAG_TEXT_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
+    #     run_test(phrase, TAG_PHRASE_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
+    #     run_test(phrase, TAG_LIKE, MODE_FIXED, FIXED_TEST_DURATION, host=host)
+    #     print(f"Cooling down for {COOLDOWN_TIME} seconds...")
+    #     time.sleep(COOLDOWN_TIME)
 
     # Final analysis
     subprocess.run(["python3", "analyze_results.py"], check=True)
