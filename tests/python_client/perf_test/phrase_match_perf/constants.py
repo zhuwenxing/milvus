@@ -20,6 +20,7 @@ MODE_PROGRESSIVE = "progressive"
 MODE_FIXED = "fixed"
 
 # Test tags
+TAG_TEXT_MATCH = "text_match"
 TAG_PHRASE_MATCH = "phrase_match"
 TAG_LIKE = "like"
 

@@ -27,6 +27,7 @@ class MilvusUser(HttpUser):
         # logger.info(f"Using phrase_candidate: {self.phrase_candidate}")
 
         # Initialize filters
+        self.text_match_filter = f"text_match(sentence, '{self.phrase_candidate}')"
         self.phrase_match_filter = f"phrase_match(sentence, '{self.phrase_candidate}')"
         self.like_filter = f"sentence like '%{self.phrase_candidate}%'"
 
@@ -37,6 +38,25 @@ class MilvusUser(HttpUser):
                               json={"collectionName": "test_phrase_match_perf",
                                     "outputFields": ["id"],
                                     "filter": self.phrase_match_filter,
+                                    "limit": 1000
+                                    },
+                              headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},
+                              catch_response=True
+                              ) as resp:
+            if resp.status_code != 200 or resp.json()["code"] != 0:
+                resp.failure(f"query failed with error {resp.text}")
+                print(resp.text)
+            else:
+                pass
+
+
+    @tag('text_match')
+    @task
+    def query_with_text_match(self):
+        with self.client.post("/v2/vectordb/entities/query",
+                              json={"collectionName": "test_phrase_match_perf",
+                                    "outputFields": ["id"],
+                                    "filter": self.text_match_filter,
                                     "limit": 1000
                                     },
                               headers={"Content-Type": "application/json", "Authorization": "Bearer root:Milvus"},

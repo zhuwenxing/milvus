@@ -6,7 +6,7 @@ from pathlib import Path
 from constants import (
     HOST, TEST_DURATION, FIXED_TEST_DURATION, FIXED_USERS,
     COOLDOWN_TIME, TEST_PHRASES, MODE_PROGRESSIVE, MODE_FIXED,
-    TAG_PHRASE_MATCH, TAG_LIKE, RESULTS_DIR, HTML_RESULTS_DIR, PROCESS_COUNT
+    TAG_PHRASE_MATCH, TAG_LIKE, TAG_TEXT_MATCH, RESULTS_DIR, HTML_RESULTS_DIR, PROCESS_COUNT
 )
 
 def run_test(phrase: str, tag: str, mode: str, duration: int, host: str = HOST) -> None:
@@ -63,9 +63,11 @@ def main():
     """Main function to run all performance tests."""
     args = parse_args()
     host = args.host
+
     # Phase 1: Progressive load tests
     print("Phase 1: Running progressive load tests to find optimal QPS")
     for phrase in TEST_PHRASES.keys():
+        run_test(phrase, TAG_TEXT_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
         run_test(phrase, TAG_PHRASE_MATCH, MODE_PROGRESSIVE, TEST_DURATION, host=host)
         run_test(phrase, TAG_LIKE, MODE_PROGRESSIVE, TEST_DURATION, host=host)
         print(f"Cooling down for {COOLDOWN_TIME} seconds...")
@@ -74,6 +76,7 @@ def main():
     # Phase 2: Fixed user tests
     print("Phase 2: Running fixed user tests for performance comparison")
     for phrase in TEST_PHRASES.keys():
+        run_test(phrase, TAG_TEXT_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
         run_test(phrase, TAG_PHRASE_MATCH, MODE_FIXED, FIXED_TEST_DURATION, host=host)
         run_test(phrase, TAG_LIKE, MODE_FIXED, FIXED_TEST_DURATION, host=host)
         print(f"Cooling down for {COOLDOWN_TIME} seconds...")
