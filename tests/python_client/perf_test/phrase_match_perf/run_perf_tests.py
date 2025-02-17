@@ -66,9 +66,8 @@ def main():
 
     expr_tags = [TAG_TEXT_MATCH, TAG_PHRASE_MATCH, TAG_LIKE]
     load_types = [MODE_PROGRESSIVE, MODE_FIXED]
-
-    for phrase in TEST_PHRASES.keys():
-        for expr_tag in expr_tags:
+    for expr_tag in expr_tags:
+        for phrase in TEST_PHRASES.keys():
             for load_type in load_types:
                 run_test(phrase, expr_tag, load_type, TEST_DURATION, host=host)
                 print(f"Cooling down for {COOLDOWN_TIME} seconds...")
