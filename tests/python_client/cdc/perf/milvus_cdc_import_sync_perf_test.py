@@ -1,33 +1,33 @@
 import time
 import random
 import threading
+import os
+import uuid
+import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pymilvus import connections, Collection, DataType, FieldSchema, CollectionSchema, utility
+from pymilvus.bulk_writer import bulk_import, get_import_progress, list_import_jobs
 from loguru import logger
 
 class MilvusCDCPerformanceTest:
-    def __init__(self, source_alias, target_alias):
+    def __init__(self, source_alias, target_alias, source_url, target_url):
         self.source_alias = source_alias
         self.target_alias = target_alias
+        self.source_url = source_url
+        self.target_url = target_url
         self.source_collection = None
         self.target_collection = None
-        self.insert_count = 0
-        self.sync_count = 0
-        self.insert_lock = threading.Lock()
-        self.sync_lock = threading.Lock()
-        self.latest_insert_ts = 0
-        self.latest_query_ts = 0
-        self.stop_query = False
-        self.latencies = []
-        self.latest_insert_status = {
-            "latest_ts": 0,
-            "latest_count": 0
-        }
+        self.data_dir = 'import_test_data'
+        self.source_jobs = {}  # Dict of {job_id: (files, start_time, complete_time)}
+        self.target_jobs = {}  # Dict of {job_id: (files, start_time, complete_time)}
+        self.target_completed_files = set()  # Set of completed file paths in target
+        self.latencies = []  # List of (files, source_complete_time, target_complete_time) tuples
+        self.stop_import = False
 
     def setup_collections(self):
         fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
             FieldSchema(name="timestamp", dtype=DataType.INT64),
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=128)
         ]
@@ -47,125 +47,185 @@ class MilvusCDCPerformanceTest:
         time.sleep(1)
         logger.info(f"source collection: {self.source_collection.describe()}")
         logger.info(f"target collection: {self.target_collection.describe()}")
+        
+        # Create data directory if it doesn't exist
+        os.makedirs(self.data_dir, exist_ok=True)
+        # prepare import data to minio
+
+
 
     def generate_data(self, num_entities):
         current_ts = int(time.time() * 1000)
-        return [
-            [current_ts for _ in range(num_entities)],  # timestamp
-            [[random.random() for _ in range(128)] for _ in range(num_entities)]  # vector
-        ]
+        data = {
+            'id': list(range(num_entities)),
+            'timestamp': [current_ts] * num_entities,
+            'vector': [[random.random() for _ in range(128)] for _ in range(num_entities)]
+        }
+        return pd.DataFrame(data)
+    
+    def prepare_import_data(self, num_entities, num_files=10):
+        """Prepare parquet files for import testing"""
+        entities_per_file = num_entities // num_files
+        file_paths = []
+        
+        for i in range(num_files):
+            df = self.generate_data(entities_per_file)
+            file_name = f'{uuid.uuid4()}.parquet'
+            file_path = os.path.join(self.data_dir, file_name)
+            df.to_parquet(file_path)
+            file_paths.append([file_path])
+            
+        return file_paths
 
-    def continuous_insert(self, duration, batch_size):
+
+    def do_import(self, file_paths):
+        """Start an import job and return the job ID"""
+        resp = bulk_import(
+            url=self.source_url,
+            collection_name=self.source_collection.name,
+            files=file_paths
+        )
+        
+        job_id = resp.json()['data']['jobId']
+        self.source_jobs[job_id] = (tuple(sorted(file_paths)), time.time(), None)
+        return job_id
+
+    def continuous_import(self, duration, batch_size):
+        """Continuously start import jobs for the duration"""
         end_time = time.time() + duration
-        while time.time() < end_time:
-            entities = self.generate_data(batch_size)
-            self.source_collection.insert(entities)
-            with (self.insert_lock):
-                self.insert_count += batch_size
-                self.latest_insert_status = {
-                    "latest_ts": entities[0][-1],
-                    "latest_count": self.insert_count
-                }  # Update the latest insert timestamp
-                # logger.info(f"insert_count: {self.insert_count}, latest_ts: {self.latest_insert_status['latest_ts']}")
-            time.sleep(0.01)  # Small delay to prevent overwhelming the system
+        while time.time() < end_time and not self.stop_import:
+            file_paths = self.prepare_import_data(batch_size)
+            job_id = self.do_import(file_paths)
+            logger.info(f"Started import job {job_id}")
+            time.sleep(1)  # Small delay between imports
+            
 
-    def continuous_query(self):
-        while not self.stop_query:
-            with self.insert_lock:
-                latest_insert_ts = self.latest_insert_status["latest_ts"]
-                latest_insert_count = self.latest_insert_status["latest_count"]
-            if latest_insert_ts > self.latest_query_ts:
-                t0 = time.time()
-                results = self.target_collection.query(
-                    expr=f"timestamp == {latest_insert_ts}",
-                    output_fields=["timestamp"],
-                    limit=1
-                )
-                tt = time.time() - t0
-                # logger.info(f"start to query, latest_insert_ts: {latest_insert_ts}, results: {results}")
-                if len(results) > 0 and results[0]["timestamp"] == latest_insert_ts:
+    def monitor_import_progress(self):
+        """Monitor import progress on both source and target clusters"""
+        while not self.stop_import or self.source_jobs:
+            # Check source jobs that haven't completed
+            for job_id, (files, start_time, complete_time) in list(self.source_jobs.items()):
+                if complete_time is None:
+                    source_resp = get_import_progress(
+                        url=self.source_url,
+                        job_id=job_id
+                    ).json()
+                    
+                    if source_resp['data']['state'] == 'Completed':
+                        source_complete_time = datetime.strptime(
+                            source_resp['data']['completeTime'].split('+')[0],
+                            '%Y-%m-%dT%H:%M:%S'
+                        ).timestamp()
+                        self.source_jobs[job_id] = (files, start_time, source_complete_time)
+            
+            # Check target jobs
+            target_resp = list_import_jobs(
+                url=self.target_url,
+                collection_name=self.source_collection.name
+            ).json()
+            
+            for job in target_resp['data']['records']:
+                if job['state'] == 'Completed':
+                    target_job_details = get_import_progress(
+                        url=self.target_url,
+                        job_id=job['jobId']
+                    ).json()
+                    
+                    # Get list of files in this target job
+                    target_files = tuple(sorted(
+                        detail['fileName'].strip('[]') 
+                        for detail in target_job_details['data']['details']
+                    ))
+                    
+                    # Skip if we've already processed these files
+                    if target_files in self.target_completed_files:
+                        continue
+                    
+                    # Find matching source job
+                    for src_job_id, (src_files, _, src_complete_time) in self.source_jobs.items():
+                        if src_files == target_files and src_complete_time is not None:
+                            target_complete_time = datetime.strptime(
+                                target_job_details['data']['completeTime'].split('+')[0],
+                                '%Y-%m-%dT%H:%M:%S'
+                            ).timestamp()
+                            
+                            # Calculate latency
+                            latency = target_complete_time - src_complete_time
+                            self.latencies.append((src_files, src_complete_time, target_complete_time))
+                            self.target_completed_files.add(target_files)
+                            logger.info(f"Import job for files {src_files} completed. Latency: {latency:.2f}s")
+                            break
+            
+            time.sleep(1)  # Check interval
 
-                    end_time = time.time()
-                    latency = end_time - (latest_insert_ts / 1000) - tt  # Convert milliseconds to seconds
-                    with self.sync_lock:
-                        self.latest_query_ts = latest_insert_ts
-                        self.sync_count = latest_insert_count
-                        self.latencies.append(latency)
-            time.sleep(0.01)  # Query interval
-
-    def measure_performance(self, duration, batch_size, concurrency):
-        self.insert_count = 0
-        self.sync_count = 0
-        self.latest_insert_ts = 0
-        self.latest_query_ts = int(time.time() * 1000)
+    def measure_performance(self, duration, batch_size):
+        """Measure import sync performance"""
         self.latencies = []
-        self.stop_query = False
+        self.source_jobs = {}
+        self.target_completed_files = set()
+        self.stop_import = False
+        
+        # Start monitoring thread
+        monitor_thread = threading.Thread(target=self.monitor_import_progress)
+        monitor_thread.start()
+        
+        # Start import thread
+        import_thread = threading.Thread(target=self.continuous_import, args=(duration, batch_size))
+        import_thread.start()
+        
+        # Wait for duration
+        time.sleep(duration)
+        self.stop_import = True
+        
+        # Wait for threads to complete
+        import_thread.join()
+        monitor_thread.join()
+        
+        # Calculate statistics
+        if self.latencies:
+            latencies = [lat[2] - lat[1] for lat in self.latencies]
+            avg_latency = sum(latencies) / len(latencies)
+            max_latency = max(latencies)
+            min_latency = min(latencies)
+            p99_latency = sorted(latencies)[int(len(latencies) * 0.99)]
+            
+            logger.info("\nPerformance Results:")
+            logger.info(f"Total Jobs: {len(self.latencies)}")
+            logger.info(f"Average Latency: {avg_latency:.2f}s")
+            logger.info(f"Max Latency: {max_latency:.2f}s")
+            logger.info(f"Min Latency: {min_latency:.2f}s")
+            logger.info(f"P99 Latency: {p99_latency:.2f}s")
+        else:
+            logger.warning("No import jobs completed during the test duration")
 
-        start_time = time.time()
-
-        # Start continuous query thread
-        query_thread = threading.Thread(target=self.continuous_query)
-        query_thread.start()
-
-        # Start continuous insert threads
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            futures = [executor.submit(self.continuous_insert, duration, batch_size) for _ in range(concurrency)]
-
-        # Wait for all insert operations to complete
-        for future in futures:
-            future.result()
-
-        self.stop_query = True
-        query_thread.join()
-
-        # self.source_collection.flush()
-
-        end_time = time.time()
-        total_time = end_time - start_time
-        insert_throughput = self.insert_count / total_time
-        sync_throughput = self.sync_count / total_time
-        avg_latency = sum(self.latencies) / len(self.latencies) if self.latencies else 0
-
-        logger.info(f"Test duration: {total_time:.2f} seconds")
-        logger.info(f"Total inserted: {self.insert_count}")
-        logger.info(f"Total synced: {self.sync_count}")
-        logger.info(f"Insert throughput: {insert_throughput:.2f} entities/second")
-        logger.info(f"Sync throughput: {sync_throughput:.2f} entities/second")
-        logger.info(f"Average latency: {avg_latency:.2f} seconds")
-        logger.info(f"Min latency: {min(self.latencies):.2f} seconds")
-        logger.info(f"Max latency: {max(self.latencies):.2f} seconds")
-
-        return total_time, self.insert_count, self.sync_count, insert_throughput, sync_throughput, avg_latency, min(
-            self.latencies), max(self.latencies)
-
-    def test_scalability(self, max_duration=300, batch_size=1000, max_concurrency=10):
-        results = []
-        for concurrency in range(10, max_concurrency + 1, 10):
-            logger.info(f"\nTesting with concurrency: {concurrency}")
-            total_time, insert_count, sync_count, insert_throughput, sync_throughput, avg_latency, min_latency, max_latency = self.measure_performance(
-                max_duration, batch_size, concurrency)
-            results.append((concurrency, total_time, insert_count, sync_count, insert_throughput, sync_throughput,
-                            avg_latency, min_latency, max_latency))
-
-        logger.info("\nScalability Test Results:")
-        for concurrency, total_time, insert_count, sync_count, insert_throughput, sync_throughput, avg_latency, min_latency, max_latency in results:
-            logger.info(f"Concurrency: {concurrency}")
-            logger.info(f"  Insert Throughput: {insert_throughput:.2f} entities/second")
-            logger.info(f"  Sync Throughput: {sync_throughput:.2f} entities/second")
-            logger.info(f"  Avg Latency: {avg_latency:.2f} seconds")
-
-        return results
-
-    def run_all_tests(self, duration=300, batch_size=1000, max_concurrency=10):
+    def run_all_tests(self, duration=300, batch_size=1000):
         logger.info("Starting Milvus CDC Performance Tests")
         self.setup_collections()
-        self.test_scalability(duration, batch_size, max_concurrency)
+        self.measure_performance(duration, batch_size)
         logger.info("Milvus CDC Performance Tests Completed")
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description='cdc perf test')
+    parser = argparse.ArgumentParser(description='CDC import sync performance test')
+    parser.add_argument('--source-alias', type=str, default='source', help='Source Milvus alias')
+    parser.add_argument('--target-alias', type=str, default='target', help='Target Milvus alias')
+    parser.add_argument('--source-url', type=str, required=True, help='Source Milvus URL')
+    parser.add_argument('--target-url', type=str, required=True, help='Target Milvus URL')
+    parser.add_argument('--duration', type=int, default=300, help='Test duration in seconds')
+    parser.add_argument('--batch-size', type=int, default=10000, help='Number of entities per import batch')
+    
+    args = parser.parse_args()
+    
+    test = MilvusCDCPerformanceTest(
+        source_alias=args.source_alias,
+        target_alias=args.target_alias,
+        source_url=args.source_url,
+        target_url=args.target_url
+    )
+    
+    test.setup_collections()
+    test.measure_performance(args.duration, args.batch_size)
     parser.add_argument('--source_uri', type=str, default='http://127.0.0.1:19530', help='source uri')
     parser.add_argument('--source_token', type=str, default='root:Milvus', help='source token')
     parser.add_argument('--target_uri', type=str, default='http://127.0.0.1:19530', help='target uri')
