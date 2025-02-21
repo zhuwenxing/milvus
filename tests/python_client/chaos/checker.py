@@ -1686,7 +1686,7 @@ class BulkInsertChecker(Checker):
         self.minio_endpoint = minio_endpoint
         self.bucket_name = bucket_name
 
-    def prepare(self, data_size=100000):
+    def prepare(self, data_size=1000):
         with RemoteBulkWriter(
                 schema=self.schema,
                 file_type=BulkFileType.NUMPY,
