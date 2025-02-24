@@ -27,7 +27,9 @@ class TestCreateCollection(TestBase):
         name = gen_collection_name()
         dim = 128
         client = self.collection_client
+        description = "this is a test collection"
         payload = {
+            "description": description,
             "collectionName": name,
             "dimension": dim,
         }
@@ -41,6 +43,7 @@ class TestCreateCollection(TestBase):
         # describe collection
         rsp = client.collection_describe(name)
         assert rsp['code'] == 0
+        assert rsp['data']['description'] == description
         assert rsp['data']['collectionName'] == name
         assert rsp['data']['autoId'] is False
         assert rsp['data']['enableDynamicField'] is True
