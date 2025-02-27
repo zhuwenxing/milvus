@@ -16,37 +16,31 @@ from pymilvus import (
     FunctionType,
     Function,
 )
+
+from pymilvus import MilvusClient
 import numpy as np
 import time
 import logging
 from faker import Faker
+import os
 
 faker = Faker()
 
-PHRASE_PROBABILITIES = {
-    "vector_similarity": 0.1,  # Most common phrase
-    "milvus_search": 0.01,  # Medium frequency phrase
-    "nearest_neighbor_search": 0.001,  # Less common phrase
-    "high_dimensional_vector_index": 0.0001,  # Rare phrase
-}
 
 
-def gen_text(phrase_probabilities):
-    for phrase, prob in phrase_probabilities.items():
-        if np.random.rand() < prob:
-            return phrase + " " + faker.text()
-    return faker.sentence()
-
+def gen_text(token_length=100):
+    return " ".join([faker.word() for _ in range(token_length)])
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+token_length = int(os.environ.get("TOKEN_LENGTH", 100))
 dim = 16
 collection_name = "test_tokenization_perf"
 data = [
     {
         "id": int(time.time() * (10 ** 6)),
-        "text": gen_text(PHRASE_PROBABILITIES),
+        "text": gen_text(token_length),
         "dense_emb": np.random.random([dim]).tolist()
     }
     for _ in range(1000)
@@ -159,6 +153,7 @@ class MilvusBaseUser(User):
         # These will be initialized in on_start
         self.fts_client = None
         self.normal_client = None
+        self.v2_client = None
 
     def on_start(self):
         """Called when a User starts running"""
@@ -168,9 +163,10 @@ class MilvusBaseUser(User):
 
     def _init_client(self):
         """Initialize the appropriate client based on mode"""
-        logger.debug(f"Initializing client")
+        logger.debug("Initializing client")
         self.fts_client = MilvusORMClient(f"{collection_name}_fts", meta_data={"insert": "fts"})
         self.normal_client = MilvusORMClient(f"{collection_name}_normal", meta_data={"insert": "normal"})
+        self.v2_client = MilvusV2Client(self.environment.host, meta_data={"token_length": token_length})
 
     def wait_time(self):
         return 0.1
@@ -190,6 +186,51 @@ class MilvusUser(MilvusBaseUser):
     def normal_insert(self):
         """Insert data into the normal collection"""
         self.normal_client.insert(data)
+
+    @task(1)
+    @tag("run_analyzer")
+    def run_analyzer(self):
+        """Run analyzer"""
+        text = gen_text(token_length)
+        analyzer_params = {
+            "tokenizer": "standard"
+        }
+        self.v2_client.run_analyzer(text, analyzer_params)
+
+
+class MilvusV2Client:
+    """Wrapper for Milvus v2 client"""
+
+    def __init__(self, host, meta_data=None):
+        logger.debug("Initializing MilvusV2Client")
+        self.request_type = "client"
+        self.uri = host
+        self.client = MilvusClient(
+            uri=self.uri,
+        )
+        self.token_length = meta_data.get("token_length", None)
+
+    def run_analyzer(self, text, analyzer_params):
+        start = time.perf_counter()
+        try:
+            res = self.client.run_analyzer(text, analyzer_params)
+            tokens = res.tokens
+            total_time = (time.perf_counter() - start) * 1000
+            events.request.fire(
+                request_type=self.request_type,
+                name=f"Run Analyzer Token Length {self.token_length}",
+                response_time=total_time,
+                response_length=len(tokens),
+                exception=None,
+            )
+        except Exception as e:
+            events.request.fire(
+                request_type=self.request_type,
+                name="Run Analyzer",
+                response_time=(time.perf_counter() - start) * 1000,
+                response_length=0,
+                exception=e,
+            )
 
 
 class MilvusORMClient:
