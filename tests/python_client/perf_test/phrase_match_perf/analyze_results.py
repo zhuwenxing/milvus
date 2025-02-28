@@ -32,7 +32,7 @@ def calculate_max_avg_qps(history):
         user_count = point['user_count']
         if user_count not in user_groups:
             user_groups[user_count] = []
-        user_groups[user_count].append(point['current_rps'])
+        user_groups[user_count].append(point['current_rps']-point['current_fail_per_sec'])
     
     # Calculate average QPS for each user group
     avg_qps_by_users = {}
@@ -72,7 +72,7 @@ def get_qps(phrase, expr_type, load_type):
 results = []
 for phrase, hit_rate in phrase_probabilities.items():
     print(f"Phrase: {phrase}, Hit Rate: {hit_rate}")
-    for expr_type in ["phrase_match", "like"]:
+    for expr_type in ["phrase_match", "text_match", "like"]:
         for load_type in ["progressive", "fixed"]:
             qps = get_qps(phrase, expr_type, load_type)
             results.append({

@@ -2,10 +2,10 @@
 
 # Test configuration
 HOST = "http://10.104.25.110:19530"
-TEST_DURATION = 100  # 10 minutes for progressive test
-FIXED_TEST_DURATION = 60  # 5 minutes for fixed user test
+TEST_DURATION = 100  # Time for progressive test
+FIXED_TEST_DURATION = 60  # Time for fixed user test
 FIXED_USERS = 50  # Default number of users for fixed test mode
-COOLDOWN_TIME = 60  # Time to wait between tests in seconds
+COOLDOWN_TIME = 120  # Time to wait between tests in seconds
 
 # Test phrases with their probabilities
 TEST_PHRASES = {
