@@ -8,7 +8,7 @@ import copy
 import numpy as np
 import requests
 from sklearn import preprocessing
-from pymilvus import Milvus, DataType
+from pymilvus import DataType, connections
 from utils.util_log import test_log as log
 from utils.util_k8s import init_k8s_client_config
 
@@ -111,14 +111,7 @@ def superstructure(x, y):
 
 
 def get_milvus(host, port, uri=None, handler=None, **kwargs):
-    if handler is None:
-        handler = "GRPC"
-    try_connect = kwargs.get("try_connect", True)
-    if uri is not None:
-        milvus = Milvus(uri=uri, handler=handler, try_connect=try_connect)
-    else:
-        milvus = Milvus(host=host, port=port, handler=handler, try_connect=try_connect)
-    return milvus
+    return connections.connect(host=host, port=port)
 
 
 def reset_build_index_threshold(connect):
