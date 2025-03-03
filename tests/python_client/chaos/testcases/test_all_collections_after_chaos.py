@@ -125,7 +125,7 @@ class TestAllCollection(TestcaseBase):
         assert len(res) >= len(data[0])
 
         # text match
-        if text_match_fields is not None:
+        if len(text_match_fields) > 0:
             queries = [fake.text().replace("\n", " ") for _ in range(1)]
 
             expr = f"text_match({text_match_fields[0]}, '{queries[0]}')"
@@ -180,7 +180,7 @@ class TestAllCollection(TestcaseBase):
         assert len(res) > 0
 
         # text match
-        if text_match_fields is not None:
+        if len(text_match_fields) > 0:
             queries = [fake.text().replace("\n", " ") for _ in range(1)]
             expr = f"text_match({text_match_fields[0]}, '{queries[0]}')"
             t0 = time.time()
