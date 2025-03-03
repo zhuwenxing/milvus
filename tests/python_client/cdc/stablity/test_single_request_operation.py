@@ -2,7 +2,7 @@ import time
 
 import pytest
 from time import sleep
-from pymilvus import connections
+from pymilvus import connections, db
 from chaos.checker import (CollectionCreateChecker,
                            InsertChecker,
                            BulkInsertChecker,
@@ -47,7 +47,7 @@ class TestBase:
 class TestOperations(TestBase):
 
     @pytest.fixture(scope="function", autouse=True)
-    def connection(self, host, port, user, password, milvus_ns, minio_host, enable_import,
+    def connection(self, host, port, user, password, milvus_ns, minio_host, enable_import, database_name,
                    downstream_minio_host, downstream_minio_bucket):
         if user and password:
             # log.info(f"connect to {host}:{port} with user {user} and password {password}")
@@ -56,7 +56,11 @@ class TestOperations(TestBase):
             connections.connect('default', host=host, port=port)
         if connections.has_connection("default") is False:
             raise Exception("no connections")
-        log.info("connect to milvus successfully")
+        all_dbs = db.list_database()
+        if database_name not in all_dbs:
+            db.create_database(database_name)
+        db.using_database(database_name)
+        log.info(f"connect to milvus {host}:{port}, db {database_name} successfully")
         self.host = host
         self.port = port
         self.user = user
