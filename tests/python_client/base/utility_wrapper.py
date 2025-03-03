@@ -22,8 +22,8 @@ class ApiUtilityWrapper:
     def do_bulk_insert(self, collection_name, files="", partition_name=None, timeout=None,
                        using="default", check_task=None, check_items=None, **kwargs):
         working_tasks = self.get_bulk_insert_working_list()
-        log.info(f"before bulk load, there are {len(working_tasks)} working tasks")
-        log.info(f"files to load: {files}")
+        log.info(f"before bulk import, there are {len(working_tasks)} working tasks")
+        log.info(f"files to import: {files}")
         func_name = sys._getframe().f_code.co_name
         res, is_succ = api_request([self.ut.do_bulk_insert, collection_name,
                                     files, partition_name, timeout, using], **kwargs)
