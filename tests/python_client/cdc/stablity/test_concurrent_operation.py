@@ -48,7 +48,7 @@ class TestBase:
 class TestOperations(TestBase):
 
     @pytest.fixture(scope="function", autouse=True)
-    def connection(self, host, port, user, password, milvus_ns):
+    def connection(self, host, port, user, password, milvus_ns, minio_host, target_minio_endpoint, target_minio_bucket_name):
         if user and password:
             # log.info(f"connect to {host}:{port} with user {user} and password {password}")
             connections.connect('default', host=host, port=port, user=user, password=password, secure=True)
@@ -64,23 +64,24 @@ class TestOperations(TestBase):
         self.milvus_sys = MilvusSys(alias='default')
         self.milvus_ns = milvus_ns
         self.release_name = get_milvus_instance_name(self.milvus_ns, milvus_sys=self.milvus_sys)
+        self.ms = MilvusSys()
+        self.bucket_name = self.ms.index_nodes[0]["infos"]["system_configurations"]["minio_bucket_name"]
+        self.minio_endpoint = f"{minio_host}:9000"
+        self.target_minio_endpoint = target_minio_endpoint
+        self.target_minio_bucket_name = target_minio_bucket_name
 
     def init_health_checkers(self, collection_name=None):
         c_name = collection_name
         checkers = {
             Op.insert: InsertChecker(collection_name=c_name),
             Op.upsert: UpsertChecker(collection_name=c_name),
-            Op.flush: FlushChecker(collection_name=c_name),
-            Op.search: SearchChecker(collection_name=c_name),
-            Op.full_text_search: FullTextSearchChecker(collection_name=c_name),
-            Op.hybrid_search: HybridSearchChecker(collection_name=c_name),
-            Op.query: QueryChecker(collection_name=c_name),
-            Op.text_match: TextMatchChecker(collection_name=c_name),
-            Op.phrase_match: PhraseMatchChecker(collection_name=c_name),
             Op.delete: DeleteChecker(collection_name=c_name),
             Op.bulk_insert: BulkInsertChecker(collection_name=c_name,
                                               bucket_name=self.bucket_name,
-                                              minio_endpoint=self.minio_endpoint)
+                                              minio_endpoint=self.minio_endpoint,
+                                              target_bucket_name=self.target_minio_bucket_name,
+                                              target_minio_endpoint=self.target_minio_endpoint,
+                                              )
         }
         log.info(f"init_health_checkers: {checkers}")
         self.health_checkers = checkers

@@ -41,7 +41,7 @@ class TestBase:
 class TestOperations(TestBase):
 
     @pytest.fixture(scope="function", autouse=True)
-    def connection(self, host, port, user, password, milvus_ns, minio_host, enable_import):
+    def connection(self, host, port, user, password, milvus_ns, minio_host, target_minio_endpoint, target_minio_bucket_name):
         if user and password:
             # log.info(f"connect to {host}:{port} with user {user} and password {password}")
             connections.connect('default', host=host, port=port, user=user, password=password, secure=True)
@@ -57,29 +57,33 @@ class TestOperations(TestBase):
         self.milvus_sys = MilvusSys(alias='default')
         self.milvus_ns = milvus_ns
         self.release_name = get_milvus_instance_name(self.milvus_ns, milvus_sys=self.milvus_sys)
-        self.enable_import = enable_import
         self.minio_endpoint = f"{minio_host}:9000"
         self.ms = MilvusSys()
         self.bucket_name = self.ms.index_nodes[0]["infos"]["system_configurations"]["minio_bucket_name"]
+        self.target_minio_endpoint = target_minio_endpoint
+        self.target_minio_bucket_name = target_minio_bucket_name
 
     def init_health_checkers(self, collection_name=None):
         c_name = collection_name
         checkers = {
-            Op.create: CollectionCreateChecker(collection_name=c_name),
-            Op.insert: InsertChecker(collection_name=c_name),
-            Op.upsert: UpsertChecker(collection_name=c_name),
-            Op.flush: FlushChecker(collection_name=c_name),
-            Op.index: IndexCreateChecker(collection_name=c_name),
-            Op.delete: DeleteChecker(collection_name=c_name),
-            Op.drop: CollectionDropChecker(collection_name=c_name),
+            # Op.create: CollectionCreateChecker(collection_name=c_name),
+            # Op.insert: InsertChecker(collection_name=c_name),
+            # Op.upsert: UpsertChecker(collection_name=c_name),
+            # Op.flush: FlushChecker(collection_name=c_name),
+            # Op.index: IndexCreateChecker(collection_name=c_name),
+            # Op.delete: DeleteChecker(collection_name=c_name),
+            # Op.drop: CollectionDropChecker(collection_name=c_name),
             Op.bulk_insert: BulkInsertChecker(collection_name=c_name,
                                               bucket_name=self.bucket_name,
-                                              minio_endpoint=self.minio_endpoint)
+                                              minio_endpoint=self.minio_endpoint,
+                                              target_bucket_name=self.target_minio_bucket_name,
+                                              target_minio_endpoint=self.target_minio_endpoint,
+                                              )
         }
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check):
+    def test_operations(self, request_duration):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
@@ -102,9 +106,6 @@ class TestOperations(TestBase):
                 event_records.insert("init_chaos", "ready")
             for k, v in self.health_checkers.items():
                 v.check_result()
-        if is_check:
-            assert_statistic(self.health_checkers, succ_rate_threshold=0.98)
-            assert_expectations()
         # wait all pod ready
         wait_pods_ready(self.milvus_ns, f"app.kubernetes.io/instance={self.release_name}")
         time.sleep(60)

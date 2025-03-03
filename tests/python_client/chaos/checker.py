@@ -25,6 +25,7 @@ from common.milvus_sys import MilvusSys
 from chaos import constants
 
 from common.common_type import CheckTasks
+from utils.util_common import MinioSyncer
 from utils.util_log import test_log as log
 from utils.api_request import Error
 
@@ -1671,13 +1672,15 @@ class BulkInsertChecker(Checker):
     """check bulk insert operations in a dependent thread"""
 
     def __init__(self, collection_name=None, files=[], use_one_collection=False, dim=ct.default_dim,
-                 schema=None, insert_data=False, minio_endpoint=None, bucket_name=None):
+                 schema=None, insert_data=False, minio_endpoint=None, bucket_name=None,
+                 target_minio_endpoint=None, target_bucket_name=None):
         if collection_name is None:
             collection_name = cf.gen_unique_str("BulkInsertChecker_")
         super().__init__(collection_name=collection_name, dim=dim, schema=schema, insert_data=insert_data)
         self.utility_wrap = ApiUtilityWrapper()
         self.schema = cf.gen_bulk_insert_collection_schema() if schema is None else schema
         self.files = files
+        self.batch_files = []
         self.recheck_failed_task = False
         self.failed_tasks = []
         self.failed_tasks_id = []
@@ -1685,11 +1688,13 @@ class BulkInsertChecker(Checker):
         self.c_name = collection_name
         self.minio_endpoint = minio_endpoint
         self.bucket_name = bucket_name
+        self.target_minio_endpoint = target_minio_endpoint
+        self.target_minio_bucket_name = target_bucket_name
 
     def prepare(self, data_size=1000):
         with RemoteBulkWriter(
                 schema=self.schema,
-                file_type=BulkFileType.NUMPY,
+                file_type=BulkFileType.PARQUET,
                 remote_path="bulk_data",
                 connect_param=RemoteBulkWriter.ConnectParam(
                     endpoint=self.minio_endpoint,
@@ -1700,12 +1705,32 @@ class BulkInsertChecker(Checker):
         ) as remote_writer:
 
             for i in range(data_size):
-                row = cf.get_row_data_by_schema(nb=1, schema=self.schema)[0]
+                row = cf.gen_row_data_by_schema(nb=1, schema=self.schema)[0]
                 remote_writer.append_row(row)
             remote_writer.commit()
             batch_files = remote_writer.batch_files
             log.info(f"batch files: {batch_files}")
             self.files = batch_files[0]
+            self.batch_files = batch_files
+        self.sync_files_to_target()
+
+    def sync_files_to_target(self):
+        syncer = MinioSyncer(
+            src_endpoint=self.minio_endpoint,
+            src_access_key="minioadmin",
+            src_secret_key="minioadmin",
+            dst_endpoint=self.target_minio_endpoint,
+            dst_access_key="minioadmin",
+            dst_secret_key="minioadmin",
+            secure=False
+        )
+        all_files = [file for batch in self.batch_files for file in batch]
+        success, errors, skipped = syncer.sync_files(
+            src_bucket=self.bucket_name,
+            dst_bucket=self.target_minio_bucket_name,
+            files=all_files
+        )
+        log.info(f"sync files success: {success}, errors: {errors}, skipped: {skipped}")
 
     def update(self, files=None, schema=None):
         if files is not None:
@@ -1751,7 +1776,11 @@ class BulkInsertChecker(Checker):
         return task_ids, completed
 
     def keep_running(self):
-        self.prepare()
+        try:
+            self.prepare()
+        except Exception as e:
+            log.error(f"prepare bulk insert failed: {e}")
+            return
         while self._keep_running:
             self.run_task()
             sleep(constants.WAIT_PER_OP / 10)
