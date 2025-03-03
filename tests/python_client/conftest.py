@@ -47,8 +47,13 @@ def pytest_addoption(parser):
     parser.addoption('--field_name', action='store', default="field_name", help="field_name of index")
     parser.addoption('--replica_num', action='store', default=ct.default_replica_num, help="memory replica number")
     parser.addoption('--minio_host', action='store', default="localhost", help="minio service's ip")
+    parser.addoption('--minio_bucket', action='store', default="localhost", help="minio bucket")
+    parser.addoption('--downstream_minio_host', action='store', default="localhost", help="downstream minio service's ip")
+    parser.addoption('--downstream_minio_bucket', action='store', default="milvus-bucket", help="downstream minio bucket")
     parser.addoption('--uri', action='store', default="", help="uri for milvus client")
     parser.addoption('--token', action='store', default="root:Milvus", help="token for milvus client")
+    parser.addoption('--downstream_uri', action='store', default="", help="uri for downstream milvus client")
+    parser.addoption('--downstream_token', action='store', default="root:Milvus", help="token for downstream milvus client")
     parser.addoption("--request_duration", action="store", default="10m", help="request_duration")
 
 
@@ -190,6 +195,11 @@ def minio_host(request):
 
 
 @pytest.fixture
+def minio_bucket(request):
+    return request.config.getoption("--minio_bucket")
+
+
+@pytest.fixture
 def uri(request):
     return request.config.getoption("--uri")
 
@@ -197,6 +207,26 @@ def uri(request):
 @pytest.fixture
 def token(request):
     return request.config.getoption("--token")
+
+
+@pytest.fixture
+def downstream_minio_host(request):
+    return request.config.getoption("--downstream_minio_host")
+
+
+@pytest.fixture
+def downstream_minio_bucket(request):
+    return request.config.getoption("--downstream_minio_bucket")
+
+
+@pytest.fixture
+def downstream_uri(request):
+    return request.config.getoption("--downstream_uri")
+
+
+@pytest.fixture
+def downstream_token(request):
+    return request.config.getoption("--downstream_token")
 
 
 @pytest.fixture

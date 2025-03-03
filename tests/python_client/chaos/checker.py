@@ -1700,7 +1700,7 @@ class BulkInsertChecker(Checker):
         ) as remote_writer:
 
             for i in range(data_size):
-                row = cf.get_row_data_by_schema(nb=1, schema=self.schema)[0]
+                row = cf.gen_row_data_by_schema(nb=1, schema=self.schema)[0]
                 remote_writer.append_row(row)
             remote_writer.commit()
             batch_files = remote_writer.batch_files
