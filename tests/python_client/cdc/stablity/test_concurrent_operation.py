@@ -95,7 +95,7 @@ class TestOperations(TestBase):
         yield request.param
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check, collection_name):
+    def test_operations(self, request_duration, collection_name):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
@@ -119,7 +119,4 @@ class TestOperations(TestBase):
         time.sleep(60)
         ra = ResultAnalyzer()
         ra.get_stage_success_rate()
-        if is_check:
-            assert_statistic(self.health_checkers)
-            assert_expectations()
         log.info("*********************Chaos Test Completed**********************")

@@ -101,7 +101,7 @@ class TestOperations(TestBase):
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
-    def test_operations(self, request_duration, is_check):
+    def test_operations(self, request_duration):
         # start the monitor threads to check the milvus ops
         log.info("*********************Test Start**********************")
         log.info(connections.get_connection_addr('default'))
