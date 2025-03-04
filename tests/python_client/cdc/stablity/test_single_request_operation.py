@@ -47,7 +47,7 @@ class TestBase:
 class TestOperations(TestBase):
 
     @pytest.fixture(scope="function", autouse=True)
-    def connection(self, host, port, user, password, milvus_ns, minio_host, enable_import, database_name,
+    def connection(self, host, port, user, password, milvus_ns, minio_host, database_name,
                    downstream_minio_host, downstream_minio_bucket):
         if user and password:
             # log.info(f"connect to {host}:{port} with user {user} and password {password}")
@@ -68,7 +68,6 @@ class TestOperations(TestBase):
         self.milvus_sys = MilvusSys(alias='default')
         self.milvus_ns = milvus_ns
         self.release_name = get_milvus_instance_name(self.milvus_ns, milvus_sys=self.milvus_sys)
-        self.enable_import = enable_import
         self.minio_endpoint = f"{minio_host}:9000"
         self.ms = MilvusSys()
         self.bucket_name = self.ms.index_nodes[0]["infos"]["system_configurations"]["minio_bucket_name"]
@@ -92,12 +91,6 @@ class TestOperations(TestBase):
                                               downstream_bucket_name=self.downstream_minio_bucket,
                                               )
         }
-        if bool(self.enable_import):
-            checkers[Op.bulk_insert] = BulkInsertChecker(collection_name=c_name,
-                                                         bucket_name=self.bucket_name,
-                                                         minio_endpoint=self.minio_endpoint,
-                                                         downstream_minio_endpoint=self.downstream_minio_endpoint,
-                                                         downstream_bucket_name=self.downstream_minio_bucket)
         self.health_checkers = checkers
 
     @pytest.mark.tags(CaseLabel.L3)
