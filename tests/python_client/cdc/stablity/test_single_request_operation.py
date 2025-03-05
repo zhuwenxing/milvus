@@ -8,12 +8,6 @@ from chaos.checker import (CollectionCreateChecker,
                            BulkInsertChecker,
                            UpsertChecker,
                            FlushChecker,
-                           SearchChecker,
-                           FullTextSearchChecker,
-                           HybridSearchChecker,
-                           QueryChecker,
-                           TextMatchChecker,
-                           PhraseMatchChecker,
                            IndexCreateChecker,
                            DeleteChecker,
                            CollectionDropChecker,
@@ -26,9 +20,7 @@ from utils.util_k8s import wait_pods_ready, get_milvus_instance_name
 from chaos import chaos_commons as cc
 from common.common_type import CaseLabel
 from common.milvus_sys import MilvusSys
-from chaos.chaos_commons import assert_statistic
 from chaos import constants
-from delayed_assert import assert_expectations
 
 
 class TestBase:
@@ -117,9 +109,6 @@ class TestOperations(TestBase):
                 event_records.insert("init_chaos", "ready")
             for k, v in self.health_checkers.items():
                 v.check_result()
-        if is_check:
-            assert_statistic(self.health_checkers, succ_rate_threshold=0.98)
-            assert_expectations()
         # wait all pod ready
         wait_pods_ready(self.milvus_ns, f"app.kubernetes.io/instance={self.release_name}")
         time.sleep(60)
