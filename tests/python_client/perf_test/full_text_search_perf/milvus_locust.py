@@ -252,7 +252,7 @@ class MilvusUser(MilvusBaseUser):
         search_data = faker.sentence()
         expr = f"TEXT_MATCH(text, '{search_data}')"
         logger.debug("Performing query")
-        self.client.query(expr=expr)
+        self.client.query(expr=expr, expr_type="text_match")
 
     @tag("phrase_match", "query")
     @task(2)
@@ -262,7 +262,7 @@ class MilvusUser(MilvusBaseUser):
         search_data = random.choice(list(PHRASE_PROBABILITIES.keys()))
         expr = f"PHRASE_MATCH(text, '{search_data}', {slop})"
         logger.debug("Performing query")
-        self.client.query(expr=expr)
+        self.client.query(expr=expr, expr_type="phrase_match")
 
     @tag("delete")
     @task(1)
@@ -358,7 +358,7 @@ class MilvusORMClient:
                 exception=e,
             )
 
-    def query(self, expr, output_fields=None):
+    def query(self, expr, output_fields=None, expr_type="text_match"):
         if output_fields is None:
             output_fields = ["id"]
         start = time.time()
@@ -370,7 +370,7 @@ class MilvusORMClient:
                 raise Exception("Empty results")
             events.request.fire(
                 request_type=self.request_type,
-                name="Query",
+                name=f"Query_{expr_type}",
                 response_time=total_time,
                 response_length=0,
                 exception=None,
