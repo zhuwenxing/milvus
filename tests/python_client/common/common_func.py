@@ -785,7 +785,7 @@ def gen_default_collection_schema(description=ct.default_desc, primary_field=ct.
 
 
 def gen_all_datatype_collection_schema(description=ct.default_desc, primary_field=ct.default_int64_field_name,
-                                       auto_id=False, dim=ct.default_dim, enable_dynamic_field=True, nullable=True,**kwargs):
+                                       auto_id=False, dim=ct.default_dim, enable_dynamic_field=True, nullable=False,**kwargs):
     analyzer_params = {
         "tokenizer": "standard",
     }
@@ -793,9 +793,9 @@ def gen_all_datatype_collection_schema(description=ct.default_desc, primary_fiel
         gen_int64_field(),
         gen_float_field(nullable=nullable),
         gen_string_field(nullable=nullable),
-        gen_string_field(name="text_match", max_length=2000, enable_analyzer=True, enable_match=True, nullable=nullable),
-        gen_string_field(name="text", max_length=2000, enable_analyzer=True, enable_match=True,
-                         analyzer_params=analyzer_params),
+        # gen_string_field(name="text_match", max_length=2000, enable_analyzer=True, enable_match=True, nullable=nullable),
+        # gen_string_field(name="text", max_length=2000, enable_analyzer=True, enable_match=True,
+        #                  analyzer_params=analyzer_params),
         gen_json_field(),
         gen_array_field(name="array_int", element_type=DataType.INT64),
         gen_array_field(name="array_float", element_type=DataType.FLOAT),
@@ -803,21 +803,21 @@ def gen_all_datatype_collection_schema(description=ct.default_desc, primary_fiel
         gen_array_field(name="array_bool", element_type=DataType.BOOL),
         gen_float_vec_field(dim=dim),
         gen_float_vec_field(name="image_emb", dim=dim),
-        gen_float_vec_field(name="text_sparse_emb", vector_data_type="SPARSE_FLOAT_VECTOR"),
+        # gen_float_vec_field(name="text_sparse_emb", vector_data_type="SPARSE_FLOAT_VECTOR"),
         gen_float_vec_field(name="voice_emb", dim=dim),
     ]
 
     schema, _ = ApiCollectionSchemaWrapper().init_collection_schema(fields=fields, description=description,
                                                                     primary_field=primary_field, auto_id=auto_id,
                                                                     enable_dynamic_field=enable_dynamic_field, **kwargs)
-    bm25_function = Function(
-        name=f"text",
-        function_type=FunctionType.BM25,
-        input_field_names=["text"],
-        output_field_names=["text_sparse_emb"],
-        params={},
-    )
-    schema.add_function(bm25_function)
+    # bm25_function = Function(
+    #     name=f"text",
+    #     function_type=FunctionType.BM25,
+    #     input_field_names=["text"],
+    #     output_field_names=["text_sparse_emb"],
+    #     params={},
+    # )
+    # schema.add_function(bm25_function)
     return schema
 
 
