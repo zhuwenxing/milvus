@@ -51,6 +51,7 @@ def setup_collection(environment):
     # 获取配置参数
     collection_name = environment.parsed_options.milvus_collection
     reindex = environment.parsed_options.reindex == "true"
+    tei_endpoint = environment.parsed_options.tei_endpoint
     logger.info(
         f"Collection name: {collection_name}, reindex: {reindex} {type(reindex)}"
     )
@@ -81,7 +82,18 @@ def setup_collection(environment):
         output_field_names=["sparse"],
         params={},
     )
+    text_embedding_function = Function(
+        name="text_embedding",
+        function_type=FunctionType.TEXTEMBEDDING,
+        input_field_names=["text"],
+        output_field_names=["dense_emb"],
+        params={
+            "provider": "TEI",
+            "endpoint": tei_endpoint,
+        },
+    )
     schema.add_function(bm25_function)
+    schema.add_function(text_embedding_function)
     collection = Collection(collection_name, schema)
 
     # 创建索引
@@ -234,7 +246,7 @@ class MilvusUser(MilvusBaseUser):
 
     @tag("dense", "search")
     @task(4)
-    def dense_search(self):
+    def vector_dense_search(self):
         """full text search"""
         logger.debug("Performing dense vector search")
         search_data = [self._random_vector()]
@@ -242,7 +254,20 @@ class MilvusUser(MilvusBaseUser):
             data=search_data,
             anns_field="dense_emb",
             top_k=self.top_k,
-            search_type="dense-search",
+            search_type="vector-dense-search",
+        )
+
+    @tag("dense", "search")
+    @task(4)
+    def text_dense_search(self):
+        """full text search"""
+        logger.debug("Performing text dense vector search")
+        search_data = [faker.text(max_nb_chars=300)]
+        self.client.search(
+            data=search_data,
+            anns_field="dense_emb",
+            top_k=self.top_k,
+            search_type="text-dense-search",
         )
 
     @tag("text_match", "query")
@@ -428,7 +453,7 @@ def _(parser):
     milvus_options.add_argument(
         "--milvus-dim",
         type=int,
-        default=128,
+        default=768,
         help="Vector dimension for the collection (default: %(default)s)",
     )
     milvus_options.add_argument(
@@ -451,4 +476,7 @@ def _(parser):
     )
     milvus_options.add_argument(
         "--reindex", type=str, default="false", help=" reindex (default: %(default)s)"
+    )
+    milvus_options.add_argument(
+        "--tei-endpoint", type=str, default="http://10.255.117.184:80", help="TEI endpoint (default: %(default)s)"
     )
