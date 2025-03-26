@@ -224,7 +224,6 @@ class MilvusUser(MilvusBaseUser):
             {
                 "id": int(time.time() * (10**6)),
                 "text": gen_text(PHRASE_PROBABILITIES),
-                "dense_emb": self._random_vector(),
             }
             for _ in range(batch_size)
         ]
