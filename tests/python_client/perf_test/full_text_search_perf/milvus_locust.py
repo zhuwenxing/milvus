@@ -219,7 +219,7 @@ class MilvusUser(MilvusBaseUser):
     @task(4)
     def insert(self):
         """Insert random vectors"""
-        batch_size = 1000
+        batch_size = 100
         data = [
             {
                 "id": int(time.time() * (10**6)),
