@@ -464,7 +464,7 @@ class MilvusORMClient:
             logger.error(f"Query error: {str(e)}")
             events.request.fire(
                 request_type=self.request_type,
-                name="Query",
+                name="Query_{expr_type}",
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
                 exception=e,
