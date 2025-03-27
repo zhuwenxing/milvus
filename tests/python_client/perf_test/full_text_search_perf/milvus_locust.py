@@ -327,7 +327,7 @@ class MilvusUser(MilvusBaseUser):
         # Calculate the time window
         current_time = time.time()
         ten_minutes_ago = current_time - 600  # 10 minutes = 600 seconds
-        window_start = ten_minutes_ago - 10  # 10 seconds window
+        window_start = ten_minutes_ago - 2  # 2 seconds window
         
         # Create timestamp range expression
         expr = f"id >= {int(window_start * (10**6))} and id < {int(ten_minutes_ago * (10**6))}"
