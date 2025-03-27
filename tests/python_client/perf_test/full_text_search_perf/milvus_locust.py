@@ -1,29 +1,34 @@
-import gevent.monkey
-
+"""Milvus性能测试脚本"""
+# gevent monkey patch必须在其他导入之前
+import gevent.monkey  # noqa: E402
 gevent.monkey.patch_all()
-import grpc.experimental.gevent as grpc_gevent
 
+import grpc.experimental.gevent as grpc_gevent  # noqa: E402
 grpc_gevent.init_gevent()
 
+# 标准库导入
+import logging  # noqa: E402
+import random  # noqa: E402
+import time  # noqa: E402
+from typing import Optional  # noqa: E402
 
-from locust import User, events, task, constant_throughput, tag
-from locust.runners import MasterRunner, WorkerRunner
-from pymilvus import (
-    connections,
+# 第三方库导入
+import numpy as np  # noqa: E402
+from faker import Faker  # noqa: E402
+from locust import User, events, task, constant_throughput, tag  # noqa: E402
+from locust.runners import MasterRunner, WorkerRunner  # noqa: E402
+from pymilvus import (  # noqa: E402
     Collection,
-    FieldSchema,
     CollectionSchema,
     DataType,
-    FunctionType,
+    FieldSchema,
     Function,
+    FunctionType,
+    connections,
     utility,
 )
-import numpy as np
-import time
-import logging
-from faker import Faker
-import random
 
+# 初始化 faker
 faker = Faker()
 
 PHRASE_PROBABILITIES = {
@@ -78,7 +83,7 @@ def setup_collection(environment):
             name="raw_dense_emb",
             dtype=DataType.FLOAT_VECTOR,
             dim=environment.parsed_options.milvus_dim,
-        ),        
+        ),
         FieldSchema(
             name="dense_emb",
             dtype=DataType.FLOAT_VECTOR,
@@ -134,7 +139,7 @@ def setup_collection(environment):
         collection.create_index(
             "raw_dense_emb", {"index_type": "HNSW", "metric_type": "COSINE"}
         )
-    
+
     logger.info("Loading collection")
     collection.load()
     logger.info("Collection setup completed successfully")
@@ -181,7 +186,6 @@ def wait_for_setup(environment):
         time.sleep(1)
         is_loaded = len(collection.get_replicas().groups) > 0
     logger.info("Setup confirmed completed")
-
 
 class MilvusBaseUser(User):
     """Base Milvus user class that handles common functionality"""
@@ -249,7 +253,7 @@ class MilvusUser(MilvusBaseUser):
 
         self.client.insert(data)
         time.sleep(1)
-    
+
     @tag("upsert")
     @task(4)
     def upsert(self):
@@ -265,7 +269,7 @@ class MilvusUser(MilvusBaseUser):
         ]
 
         self.client.upsert(data)
-        time.sleep(1)        
+        time.sleep(1)
 
     @tag("sparse", "search")
     @task(4)
@@ -305,6 +309,7 @@ class MilvusUser(MilvusBaseUser):
             top_k=self.top_k,
             search_type="text-dense-search",
         )
+
     @tag("dense", "search")
     @task(4)
     def raw_dense_search(self):
@@ -337,23 +342,6 @@ class MilvusUser(MilvusBaseUser):
         logger.debug("Performing query")
         self.client.query(expr=expr, expr_type="phrase_match")
 
-    # @tag("delete")
-    # @task(1)
-    # def delete(self):
-    #     """delete random vectors in 10s window before 10 minutes"""
-    #     # Calculate the time window
-    #     current_time = time.time()
-    #     ten_minutes_ago = current_time - 600  # 10 minutes = 600 seconds
-    #     window_start = ten_minutes_ago - 60  # 1 minute window
-        
-    #     # Create timestamp range expression
-    #     expr = f"id >= {int(window_start * (10**6))} and id < {int(ten_minutes_ago * (10**6))}"
-        
-    #     # Delete vectors in the time window
-    #     self.client.delete(expr)
-    #     time.sleep(300)
-
-
 
 class MilvusORMClient:
     """Wrapper for Milvus ORM"""
@@ -376,6 +364,7 @@ class MilvusORMClient:
                 response_time=total_time,
                 response_length=0,
                 exception=None,
+                context={},
             )
             self.sleep_time = 0.1
         except Exception as e:
@@ -388,6 +377,7 @@ class MilvusORMClient:
                     response_time=(time.time() - start) * 1000,
                     response_length=0,
                     exception=e,
+                    context={},
                 )
             else:
                 events.request.fire(
@@ -396,8 +386,8 @@ class MilvusORMClient:
                     response_time=(time.time() - start) * 1000,
                     response_length=0,
                     exception=e,
+                    context={},
                 )
-
 
     def upsert(self, data):
         start = time.time()
@@ -410,6 +400,7 @@ class MilvusORMClient:
                 response_time=total_time,
                 response_length=0,
                 exception=None,
+                context={},
             )
             self.sleep_time = 0.1
         except Exception as e:
@@ -422,6 +413,7 @@ class MilvusORMClient:
                     response_time=(time.time() - start) * 1000,
                     response_length=0,
                     exception=e,
+                    context={},
                 )
             else:
                 events.request.fire(
@@ -430,6 +422,7 @@ class MilvusORMClient:
                     response_time=(time.time() - start) * 1000,
                     response_length=0,
                     exception=e,
+                    context={},
                 )
 
     def search(
@@ -462,7 +455,7 @@ class MilvusORMClient:
                 if len(r) == 0:
                     empty = True
                     break
-            
+
             if empty:
                 events.request.fire(
                     request_type=self.request_type,
@@ -470,6 +463,7 @@ class MilvusORMClient:
                     response_time=total_time,
                     response_length=0,
                     exception=None,
+                    context={},
                 )
             else:
                 events.request.fire(
@@ -478,6 +472,8 @@ class MilvusORMClient:
                     response_time=total_time,
                     response_length=0,
                     exception=None,
+                    context={},
+
                 )
         except Exception as e:
             logger.error(f"Search error: {str(e)}")
@@ -487,6 +483,7 @@ class MilvusORMClient:
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
                 exception=e,
+                context={},
             )
 
     def query(self, expr, output_fields=None, expr_type="text_match"):
@@ -503,6 +500,7 @@ class MilvusORMClient:
                     response_time=total_time,
                     response_length=0,
                     exception=None,
+                    context={},
                 )
             else:
                 events.request.fire(
@@ -511,6 +509,7 @@ class MilvusORMClient:
                     response_time=total_time,
                     response_length=0,
                     exception=None,
+                    context={},
                 )
         except Exception as e:
             logger.error(f"Query error: {str(e)}")
@@ -520,6 +519,7 @@ class MilvusORMClient:
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
                 exception=e,
+                context={},
             )
 
     def delete(self, expr):
@@ -533,6 +533,7 @@ class MilvusORMClient:
                 response_time=total_time,
                 response_length=0,
                 exception=None,
+                context={},
             )
         except Exception as e:
             logger.error(f"Delete error: {str(e)}")
@@ -542,6 +543,7 @@ class MilvusORMClient:
                 response_time=(time.time() - start) * 1000,
                 response_length=0,
                 exception=e,
+                context={},
             )
 
 
@@ -590,8 +592,14 @@ def _(parser):
         "--reindex", type=str, default="false", help=" reindex (default: %(default)s)"
     )
     milvus_options.add_argument(
-        "--recreate", type=str, default="false", help="recreate collection (default: %(default)s)"
+        "--recreate",
+        type=str,
+        default="false",
+        help="recreate collection (default: %(default)s)",
     )
     milvus_options.add_argument(
-        "--tei-endpoint", type=str, default="http://10.255.117.184:80", help="TEI endpoint (default: %(default)s)"
+        "--tei-endpoint",
+        type=str,
+        default="http://10.255.117.184:80",
+        help="TEI endpoint (default: %(default)s)",
     )
