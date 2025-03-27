@@ -334,6 +334,7 @@ class MilvusUser(MilvusBaseUser):
         
         # Delete vectors in the time window
         self.client.delete(expr)
+        time.sleep(120)
 
 
 
