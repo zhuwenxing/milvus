@@ -16,6 +16,7 @@ from pymilvus import (
     DataType,
     FunctionType,
     Function,
+    utility,
 )
 import numpy as np
 import time
@@ -26,10 +27,10 @@ import random
 faker = Faker()
 
 PHRASE_PROBABILITIES = {
-    "vector_similarity": 0.1,  # Most common phrase
-    "milvus_search": 0.01,  # Medium frequency phrase
-    "nearest_neighbor_search": 0.001,  # Less common phrase
-    "high_dimensional_vector_index": 0.0001,  # Rare phrase
+    "vector similarity": 0.1,  # Most common phrase
+    "milvus search": 0.01,  # Medium frequency phrase
+    "nearest neighbor search": 0.001,  # Less common phrase
+    "high dimensional vector index": 0.0001,  # Rare phrase
 }
 
 
@@ -50,12 +51,18 @@ def setup_collection(environment):
 
     # 获取配置参数
     collection_name = environment.parsed_options.milvus_collection
+
     reindex = environment.parsed_options.reindex == "true"
     tei_endpoint = environment.parsed_options.tei_endpoint
     logger.info(
         f"Collection name: {collection_name}, reindex: {reindex} {type(reindex)}"
     )
     connections.connect(uri=environment.host)
+    # receate collection if recreate is true
+    recreate = environment.parsed_options.recreate == "true"
+    if recreate:
+        logger.info("Recreating collection...")
+        utility.drop_collection(collection_name)
     analyzer_params = {"type": "standard"}
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True),
@@ -67,6 +74,11 @@ def setup_collection(environment):
             analyzer_params=analyzer_params,
             enable_match=True,
         ),
+        FieldSchema(
+            name="raw_dense_emb",
+            dtype=DataType.FLOAT_VECTOR,
+            dim=environment.parsed_options.milvus_dim,
+        ),        
         FieldSchema(
             name="dense_emb",
             dtype=DataType.FLOAT_VECTOR,
@@ -117,6 +129,12 @@ def setup_collection(environment):
         collection.create_index(
             "dense_emb", {"index_type": "HNSW", "metric_type": "COSINE"}
         )
+    if ("raw_dense_emb" not in indexed_fields) or reindex:
+        logger.info("Creating raw dense index")
+        collection.create_index(
+            "raw_dense_emb", {"index_type": "HNSW", "metric_type": "COSINE"}
+        )
+    
     logger.info("Loading collection")
     collection.load()
     logger.info("Collection setup completed successfully")
@@ -224,6 +242,7 @@ class MilvusUser(MilvusBaseUser):
             {
                 "id": int(time.time() * (10**6)),
                 "text": gen_text(PHRASE_PROBABILITIES),
+                "raw_dense_emb": self._random_vector(),
             }
             for _ in range(batch_size)
         ]
@@ -260,7 +279,7 @@ class MilvusUser(MilvusBaseUser):
     @tag("dense", "search")
     @task(4)
     def text_dense_search(self):
-        """full text search"""
+        """text dense vector search"""
         logger.debug("Performing text dense vector search")
         search_data = [faker.text(max_nb_chars=300)]
         self.client.search(
@@ -269,12 +288,24 @@ class MilvusUser(MilvusBaseUser):
             top_k=self.top_k,
             search_type="text-dense-search",
         )
+    @tag("dense", "search")
+    @task(4)
+    def raw_dense_search(self):
+        """raw dense vector search"""
+        logger.debug("Performing raw dense vector search")
+        search_data = [self._random_vector()]
+        self.client.search(
+            data=search_data,
+            anns_field="raw_dense_emb",
+            top_k=self.top_k,
+            search_type="raw-dense-search",
+        )
 
     @tag("text_match", "query")
     @task(2)
     def text_match(self):
         """Text Match"""
-        search_data = faker.sentence()
+        search_data = random.choice(list(PHRASE_PROBABILITIES.keys()))
         expr = f"TEXT_MATCH(text, '{search_data}')"
         logger.debug("Performing query")
         self.client.query(expr=expr, expr_type="text_match")
@@ -292,13 +323,18 @@ class MilvusUser(MilvusBaseUser):
     @tag("delete")
     @task(1)
     def delete(self):
-        """delete random vectors in 30s window before 10 minutes"""
-        _min = int((time.time() - 600) * (10**6))
-        _max = int((time.time() - 530) * (10**6))
-
-        expr = f"id >= {_min} and id <= {_max}"
-
+        """delete random vectors in 10s window before 10 minutes"""
+        # Calculate the time window
+        current_time = time.time()
+        ten_minutes_ago = current_time - 600  # 10 minutes = 600 seconds
+        window_start = ten_minutes_ago - 10  # 10 seconds window
+        
+        # Create timestamp range expression
+        expr = f"id >= {int(window_start * (10**6))} and id < {int(ten_minutes_ago * (10**6))}"
+        
+        # Delete vectors in the time window
         self.client.delete(expr)
+
 
 
 class MilvusORMClient:
@@ -328,6 +364,13 @@ class MilvusORMClient:
             if "memory" in str(e) or "deny" in str(e) or "limit" in str(e):
                 time.sleep(self.sleep_time)
                 self.sleep_time *= 2
+                events.request.fire(
+                    request_type=self.request_type,
+                    name="Insert_deny",
+                    response_time=(time.time() - start) * 1000,
+                    response_length=0,
+                    exception=e,
+                )
             else:
                 events.request.fire(
                     request_type=self.request_type,
@@ -361,18 +404,29 @@ class MilvusORMClient:
                 output_fields=output_fields,
             )
             total_time = (time.time() - start) * 1000
+            empty = False
             for r in res:
                 logger.debug(f"Search result: {r}")
                 if len(r) == 0:
-                    logger.warning("No results found")
-                    raise Exception("Empty results")
-            events.request.fire(
-                request_type=self.request_type,
-                name=name,
-                response_time=total_time,
-                response_length=0,
-                exception=None,
-            )
+                    empty = True
+                    break
+            
+            if empty:
+                events.request.fire(
+                    request_type=self.request_type,
+                    name=f"{name}_empty",
+                    response_time=total_time,
+                    response_length=0,
+                    exception=None,
+                )
+            else:
+                events.request.fire(
+                    request_type=self.request_type,
+                    name=name,
+                    response_time=total_time,
+                    response_length=0,
+                    exception=None,
+                )
         except Exception as e:
             logger.error(f"Search error: {str(e)}")
             events.request.fire(
@@ -391,15 +445,21 @@ class MilvusORMClient:
             res = self.collection.query(expr=expr, output_fields=output_fields)
             total_time = (time.time() - start) * 1000
             if len(res) == 0:
-                logger.warning("No results found")
-                raise Exception("Empty results")
-            events.request.fire(
-                request_type=self.request_type,
-                name=f"Query_{expr_type}",
-                response_time=total_time,
-                response_length=0,
-                exception=None,
-            )
+                events.request.fire(
+                    request_type=self.request_type,
+                    name=f"Query_{expr_type}_empty",
+                    response_time=total_time,
+                    response_length=0,
+                    exception=None,
+                )
+            else:
+                events.request.fire(
+                    request_type=self.request_type,
+                    name=f"Query_{expr_type}",
+                    response_time=total_time,
+                    response_length=0,
+                    exception=None,
+                )
         except Exception as e:
             logger.error(f"Query error: {str(e)}")
             events.request.fire(
@@ -476,6 +536,9 @@ def _(parser):
     )
     milvus_options.add_argument(
         "--reindex", type=str, default="false", help=" reindex (default: %(default)s)"
+    )
+    milvus_options.add_argument(
+        "--recreate", type=str, default="false", help="recreate collection (default: %(default)s)"
     )
     milvus_options.add_argument(
         "--tei-endpoint", type=str, default="http://10.255.117.184:80", help="TEI endpoint (default: %(default)s)"
