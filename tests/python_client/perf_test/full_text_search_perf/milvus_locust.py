@@ -249,6 +249,23 @@ class MilvusUser(MilvusBaseUser):
 
         self.client.insert(data)
         time.sleep(1)
+    
+    @tag("upsert")
+    @task(4)
+    def upsert(self):
+        """Insert random vectors"""
+        batch_size = 10
+        data = [
+            {
+                "id": int(time.time() * (10**6)),
+                "text": gen_text(PHRASE_PROBABILITIES),
+                "raw_dense_emb": self._random_vector(),
+            }
+            for _ in range(batch_size)
+        ]
+
+        self.client.upsert(data)
+        time.sleep(1)        
 
     @tag("sparse", "search")
     @task(4)
@@ -320,21 +337,21 @@ class MilvusUser(MilvusBaseUser):
         logger.debug("Performing query")
         self.client.query(expr=expr, expr_type="phrase_match")
 
-    @tag("delete")
-    @task(1)
-    def delete(self):
-        """delete random vectors in 10s window before 10 minutes"""
-        # Calculate the time window
-        current_time = time.time()
-        ten_minutes_ago = current_time - 600  # 10 minutes = 600 seconds
-        window_start = ten_minutes_ago - 60  # 1 minute window
+    # @tag("delete")
+    # @task(1)
+    # def delete(self):
+    #     """delete random vectors in 10s window before 10 minutes"""
+    #     # Calculate the time window
+    #     current_time = time.time()
+    #     ten_minutes_ago = current_time - 600  # 10 minutes = 600 seconds
+    #     window_start = ten_minutes_ago - 60  # 1 minute window
         
-        # Create timestamp range expression
-        expr = f"id >= {int(window_start * (10**6))} and id < {int(ten_minutes_ago * (10**6))}"
+    #     # Create timestamp range expression
+    #     expr = f"id >= {int(window_start * (10**6))} and id < {int(ten_minutes_ago * (10**6))}"
         
-        # Delete vectors in the time window
-        self.client.delete(expr)
-        time.sleep(300)
+    #     # Delete vectors in the time window
+    #     self.client.delete(expr)
+    #     time.sleep(300)
 
 
 
@@ -376,6 +393,40 @@ class MilvusORMClient:
                 events.request.fire(
                     request_type=self.request_type,
                     name="Insert",
+                    response_time=(time.time() - start) * 1000,
+                    response_length=0,
+                    exception=e,
+                )
+
+
+    def upsert(self, data):
+        start = time.time()
+        try:
+            self.collection.upsert(data)
+            total_time = (time.time() - start) * 1000
+            events.request.fire(
+                request_type=self.request_type,
+                name="Upsert",
+                response_time=total_time,
+                response_length=0,
+                exception=None,
+            )
+            self.sleep_time = 0.1
+        except Exception as e:
+            if "memory" in str(e) or "deny" in str(e) or "limit" in str(e):
+                time.sleep(self.sleep_time)
+                self.sleep_time *= 2
+                events.request.fire(
+                    request_type=self.request_type,
+                    name="Upsert_deny",
+                    response_time=(time.time() - start) * 1000,
+                    response_length=0,
+                    exception=e,
+                )
+            else:
+                events.request.fire(
+                    request_type=self.request_type,
+                    name="Upsert",
                     response_time=(time.time() - start) * 1000,
                     response_length=0,
                     exception=e,
