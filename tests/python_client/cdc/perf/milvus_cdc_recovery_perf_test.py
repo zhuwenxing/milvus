@@ -276,7 +276,7 @@ class MilvusCDCPerformance:
         schema = CollectionSchema(fields, "Milvus CDC test collection")
         c_name = "milvus_cdc_perf_test" + datetime.now().strftime("%Y%m%d%H%M%S")
         # Create collections
-        self.source_collection = Collection(c_name, schema, using=self.source_alias, num_shards=4)
+        self.source_collection = Collection(c_name, schema, using=self.source_alias, num_shards=args.num_shards)
         time.sleep(5)
         self.target_collection = Collection(c_name, using=self.target_alias)
         index_params = {
@@ -524,6 +524,7 @@ if __name__ == "__main__":
     parser.add_argument('--target_token', type=str, default='root:Milvus', help='target token')
     parser.add_argument('--cdc_host', type=str, default='10.104.19.130', help='cdc host')
     parser.add_argument('--test_duration', type=int, default=100, help='cdc test duration in seconds')
+    parser.add_argument('--num_shards', type=int, default=4, help='number of shards for collection')
 
     args = parser.parse_args()
 
