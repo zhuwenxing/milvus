@@ -277,10 +277,10 @@ class MilvusCDCPerformance:
         c_name = "milvus_cdc_perf_test" + datetime.now().strftime("%Y%m%d%H%M%S")
         # Create collections
         self.source_collection = Collection(c_name, schema, using=self.source_alias, num_shards=args.num_shards)
-        time.sleep(5)
+        time.sleep(10)
         self.target_collection = Collection(c_name, using=self.target_alias)
         index_params = {
-            "index_type": "IVF_FLAT",
+            "index_type": "IVF_SQ8",
             "metric_type": "L2",
             "params": {"nlist": 1024}
         }
@@ -518,11 +518,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='cdc perf test')
-    parser.add_argument('--source_uri', type=str, default='http://10.104.30.245:19530', help='source uri')
+    parser.add_argument('--source_uri', type=str, default='http://10.104.32.172:19530', help='source uri')
     parser.add_argument('--source_token', type=str, default='root:Milvus', help='source token')
-    parser.add_argument('--target_uri', type=str, default='http://10.104.9.69:19530', help='target uri')
+    parser.add_argument('--target_uri', type=str, default='http://10.104.14.10:19530', help='target uri')
     parser.add_argument('--target_token', type=str, default='root:Milvus', help='target token')
-    parser.add_argument('--cdc_host', type=str, default='10.104.19.130', help='cdc host')
+    parser.add_argument('--cdc_host', type=str, default='10.104.6.221', help='cdc host')
     parser.add_argument('--test_duration', type=int, default=100, help='cdc test duration in seconds')
     parser.add_argument('--num_shards', type=int, default=4, help='number of shards for collection')
     parser.add_argument('--insert_batch_size', type=int, default=5000, help='batch size for insert')
