@@ -34,13 +34,13 @@ class MilvusCDCPerformanceTest:
         schema = CollectionSchema(fields, "Milvus CDC test collection")
         c_name = "milvus_cdc_perf_test"
         # Create collections
-        self.source_collection = Collection(c_name, schema, using=self.source_alias, num_shards=4)
-        time.sleep(5)
+        self.source_collection = Collection(c_name, schema, using=self.source_alias, num_shards=args.num_shards)
+        time.sleep(10)
         self.target_collection = Collection(c_name, using=self.target_alias)
         index_params = {
-            "index_type": "IVF_FLAT",
+            "index_type": "IVF_SQ8",
             "metric_type": "L2",
-            "params": {"nlist": 1024}
+            "params": {"nlist": 128}
         }
         self.source_collection.create_index("vector", index_params)
         self.source_collection.load()
@@ -140,7 +140,7 @@ class MilvusCDCPerformanceTest:
         return total_time, self.insert_count, self.sync_count, insert_throughput, sync_throughput, avg_latency, min(
             self.latencies), max(self.latencies)
 
-    def test_scalability(self, max_duration=300, batch_size=1000, max_concurrency=10):
+    def test_scalability(self, max_duration=300, batch_size=3000, max_concurrency=10):
         results = []
         for concurrency in range(10, max_concurrency + 1, 10):
             logger.info(f"\nTesting with concurrency: {concurrency}")
@@ -158,7 +158,7 @@ class MilvusCDCPerformanceTest:
 
         return results
 
-    def run_all_tests(self, duration=300, batch_size=1000, max_concurrency=10):
+    def run_all_tests(self, duration=300, batch_size=3000, max_concurrency=10):
         logger.info("Starting Milvus CDC Performance Tests")
         self.setup_collections()
         self.test_scalability(duration, batch_size, max_concurrency)
@@ -172,10 +172,11 @@ if __name__ == "__main__":
     parser.add_argument('--source_token', type=str, default='root:Milvus', help='source token')
     parser.add_argument('--target_uri', type=str, default='http://127.0.0.1:19530', help='target uri')
     parser.add_argument('--target_token', type=str, default='root:Milvus', help='target token')
+    parser.add_argument('--num_shards', type=int, default=8, help='number of shards')
 
     args = parser.parse_args()
 
     connections.connect("source", uri=args.source_uri, token=args.source_token)
     connections.connect("target", uri=args.target_uri, token=args.target_token)
     cdc_test = MilvusCDCPerformanceTest("source", "target")
-    cdc_test.run_all_tests(duration=300, batch_size=1000, max_concurrency=100)
+    cdc_test.run_all_tests(duration=300, batch_size=3000, max_concurrency=100)
