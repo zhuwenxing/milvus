@@ -525,6 +525,7 @@ if __name__ == "__main__":
     parser.add_argument('--cdc_host', type=str, default='10.104.19.130', help='cdc host')
     parser.add_argument('--test_duration', type=int, default=100, help='cdc test duration in seconds')
     parser.add_argument('--num_shards', type=int, default=4, help='number of shards for collection')
+    parser.add_argument('--batch_size', type=int, default=5000, help='batch size for insert')
 
     args = parser.parse_args()
 
@@ -540,4 +541,4 @@ if __name__ == "__main__":
         c = Collection(collection, using="target")
         c.release()
     cdc_test = MilvusCDCPerformance("source", "target", args.cdc_host)
-    cdc_test.run_all_tests(duration=args.test_duration, batch_size=1000, max_concurrency=10)
+    cdc_test.run_all_tests(duration=args.test_duration, batch_size=args.batch_size, max_concurrency=10)
