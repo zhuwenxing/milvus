@@ -158,7 +158,7 @@ class MilvusCDCPerformanceTest:
 
         return results
 
-    def run_all_tests(self, duration=300, batch_size=3000, max_concurrency=10):
+    def run_all_tests(self, duration=180, batch_size=3000, max_concurrency=10):
         logger.info("Starting Milvus CDC Performance Tests")
         self.setup_collections()
         self.test_scalability(duration, batch_size, max_concurrency)
