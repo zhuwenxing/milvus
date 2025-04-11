@@ -1717,7 +1717,7 @@ class BulkInsertChecker(Checker):
 
         if self.downstream_minio_endpoint is not None and self.downstream_bucket_name is not None:
             # sync data from upstream to downstream
-            log.info(f"Sync data from upstream to downstream")
+            log.info("Sync data from upstream to downstream")
             syncer = MinioSyncer(
                 src_endpoint=self.minio_endpoint,
                 src_access_key="minioadmin",

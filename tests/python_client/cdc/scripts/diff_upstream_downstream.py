@@ -49,9 +49,9 @@ def get_collection_info(info, db_name, c_name, enable_compact):
     # logger.info(c.schema)
     info[db_name][c_name]['schema'] = len([f.name for f in c.schema.fields])
     # logger.info(c.indexes)
-    info[db_name][c_name]['indexes'] = [x.index_name for x in c.indexes]
+    info[db_name][c_name]['indexes'] = sorted([x.index_name for x in c.indexes])
     # logger.info(c.partitions)
-    info[db_name][c_name]['partitions'] = len([p.name for p in c.partitions])
+    info[db_name][c_name]['partitions'] = sorted([p.name for p in c.partitions])
     try:
         replicas = len(c.get_replicas().groups)
     except Exception as e:
