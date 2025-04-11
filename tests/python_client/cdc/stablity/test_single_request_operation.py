@@ -50,7 +50,10 @@ class TestOperations(TestBase):
             raise Exception("no connections")
         all_dbs = db.list_database()
         if database_name not in all_dbs:
-            db.create_database(database_name)
+            try:
+                db.create_database(database_name)
+            except Exception as e:
+                log.error(f"create database {database_name} error: {e}")
         db.using_database(database_name)
         log.info(f"connect to milvus {host}:{port}, db {database_name} successfully")
         self.host = host
