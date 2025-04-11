@@ -1772,6 +1772,10 @@ class BulkInsertChecker(Checker):
                 self.c_name = cf.gen_unique_str("BulkInsertChecker_")
         self.c_wrap.init_collection(name=self.c_name, schema=self.schema)
         log.info(f"collection schema: {self.c_wrap.schema}")
+        # create index
+        self.c_wrap.create_index(field_name=self.float_vector_field_name, index_params=constants.DEFAULT_INDEX_PARAM)
+        # load collection
+        self.c_wrap.load()
         # prepare data
         self.prepare(data_size=1000)
         # bulk insert data
@@ -1783,13 +1787,16 @@ class BulkInsertChecker(Checker):
         if not completed:
             self.failed_tasks.append(self.c_name)
             self.failed_tasks_id.append(task_ids)
+        # refresh collection
+        self.c_wrap.load(_refresh=True)
+
         return task_ids, completed
 
     def keep_running(self):
         self.prepare()
         while self._keep_running:
             self.run_task()
-            sleep(constants.WAIT_PER_OP / 10)
+            sleep(120)
 
 
 class TestResultAnalyzer(unittest.TestCase):
