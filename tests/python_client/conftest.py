@@ -45,7 +45,7 @@ def pytest_addoption(parser):
     parser.addoption('--term_expr', action='store', default="term_expr", help="expr of query quest")
     parser.addoption('--check_content', action='store', default="check_content", help="content of check")
     parser.addoption('--field_name', action='store', default="field_name", help="field_name of index")
-    parser.addoption('--replica_num', type='int', action='store', default=ct.default_replica_num, help="memory replica number")
+    parser.addoption('--replica_num', type=int, action='store', default=ct.default_replica_num, help="memory replica number")
     parser.addoption('--minio_host', action='store', default="localhost", help="minio service's ip")
     parser.addoption('--uri', action='store', default="", help="uri for high level api")
     parser.addoption('--token', action='store', default="", help="token for high level api")
