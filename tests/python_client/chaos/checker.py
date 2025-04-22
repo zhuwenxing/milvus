@@ -625,7 +625,7 @@ class CreateChecker(Checker):
     def run_task(self):
         res, result = self.init_collection()
         if result:
-            if random.random() < 0.5 or len(list_collections()) > 1000:
+            if random.random() < 0.1 or len(list_collections()) > 5000:
                 self.c_wrap.drop(timeout=timeout)
         return res, result
 
