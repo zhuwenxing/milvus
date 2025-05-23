@@ -13,7 +13,7 @@ from prettytable import PrettyTable
 import functools
 from collections import Counter
 from time import sleep
-from pymilvus import AnnSearchRequest, RRFRanker, MilvusClient, DataType
+from pymilvus import AnnSearchRequest, RRFRanker, MilvusClient, DataType, CollectionSchema
 from pymilvus.bulk_writer import RemoteBulkWriter, BulkFileType
 from base.database_wrapper import ApiDatabaseWrapper
 from base.collection_wrapper import ApiCollectionWrapper
@@ -240,6 +240,7 @@ class Op(Enum):
     load_balance = 'load_balance'
     bulk_insert = 'bulk_insert'
     alter_collection = 'alter_collection'
+    add_field = 'add_field'
     unknown = 'unknown'
 
 
@@ -465,9 +466,14 @@ class Checker:
         self.initial_entities = self.c_wrap.collection.num_entities
         self.scale = 100000  # timestamp scale to make time.time() as int64
 
+    def get_schema(self):
+        return self.c_wrap.collection.schema
+
     def insert_data(self, nb=constants.DELTA_PER_INS, partition_name=None):
         partition_name = self.p_name if partition_name is None else partition_name
-        data = cf.gen_row_data_by_schema(nb=nb, schema=self.schema)
+        client_schema = self.milvus_client.describe_collection(collection_name=self.c_name)
+        client_schema = CollectionSchema.construct_from_dict(client_schema)
+        data = cf.gen_row_data_by_schema(nb=nb, schema=client_schema)
         ts_data = []
         for i in range(nb):
             time.sleep(0.001)
@@ -482,12 +488,17 @@ class Checker:
                 wf = cf.analyze_documents(texts)
                 self.word_freq.update(wf)
 
-        res, result = self.c_wrap.insert(data=data,
-                                         partition_name=partition_name,
-                                         timeout=timeout,
-                                         enable_traceback=enable_traceback,
-                                         check_task=CheckTasks.check_nothing)
-        return res, result
+        try:
+            res = self.milvus_client.insert(
+                                             collection_name=self.c_name,
+                                             data=data,
+                                             partition_name=partition_name,
+                                             timeout=timeout,
+                                             enable_traceback=enable_traceback,
+                                             check_task=CheckTasks.check_nothing)
+            return res, True
+        except Exception as e:
+            return str(e), False
 
     def total(self):
         return self._succ + self._fail
@@ -885,6 +896,46 @@ class FlushChecker(Checker):
         while self._keep_running:
             self.run_task()
             sleep(constants.WAIT_PER_OP * 6)
+
+
+class AddFieldChecker(Checker):
+    """check add field operations in a dependent thread"""
+
+    def __init__(self, collection_name=None, shards_num=2, schema=None):
+        if collection_name is None:
+            collection_name = cf.gen_unique_str("AddFieldChecker_")
+        super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
+        self.initial_entities = self.c_wrap.collection.num_entities
+
+    @trace()
+    def add_field(self):
+        try:
+            new_field_name = cf.gen_unique_str("new_field_")
+            self.milvus_client.add_collection_field(collection_name=self.c_name,
+                                                    field_name=new_field_name,
+                                                    data_type=DataType.INT64,
+                                                    nullable=True)
+            log.debug(f"add field {new_field_name} to collection {self.c_name}")
+            time.sleep(1)
+            _, result = self.insert_data()
+            res, result = self.c_wrap.query(expr=f"{new_field_name} >= 0", output_fields=[new_field_name])
+            if result:
+                log.debug(f"query with field {new_field_name} success")
+            return None, result
+        except Exception as e:
+            log.error(e)
+            return str(e), False
+
+    @exception_handler()
+    def run_task(self):
+        res, result = self.add_field()
+        return res, result
+
+    def keep_running(self):
+        while self._keep_running:
+            self.run_task()
+            sleep(constants.WAIT_PER_OP * 6)
+
 
 
 class InsertChecker(Checker):
