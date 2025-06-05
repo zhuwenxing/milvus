@@ -3538,7 +3538,7 @@ class TestMilvusClientSearchJsonPathIndex(TestMilvusClientV2Base):
                                  "limit": default_limit})
 
 
-class TestMilvusClientSearchRerankValid(TestMilvusClientV2Base):
+class TestMilvusClientSearchDecayRerank(TestMilvusClientV2Base):
     """ Test case of search interface """
 
     @pytest.fixture(scope="function", params=[False, True])
@@ -4016,3 +4016,142 @@ class TestMilvusClientSearchRerankValid(TestMilvusClientV2Base):
                                  "pk_name": default_primary_key_field_name,
                                  "limit": default_limit}
                     )
+
+class TestMilvusClientSearchModelRerank(TestMilvusClientV2Base):
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_milvus_client_search_model_rerank(self):
+        """
+        target: test search with model rerank
+        method: create connection, collection, insert and search
+        expected: search successfully
+        """
+        client = self._client()
+        collection_name = cf.gen_collection_name_by_testcase_name()
+        
+        # 1. create schema
+        schema = self.create_schema(client, enable_dynamic_field=False, auto_id=True)[0]
+        schema.add_field("id", DataType.INT64, is_primary=True)
+        schema.add_field("document", DataType.VARCHAR, max_length=1000, enable_analyzer=True)
+        schema.add_field("dense", DataType.FLOAT_VECTOR, dim=1536)
+        schema.add_field("sparse_vector", DataType.SPARSE_FLOAT_VECTOR)
+
+        # 2. create embedding function
+        text_embedding_function = Function(
+            name="openai",
+            function_type=FunctionType.TEXTEMBEDDING,
+            input_field_names=["document"],
+            output_field_names="dense",
+            params={
+                "provider": "openai",
+                "model_name": "text-embedding-3-small",
+            },
+        )
+        schema.add_function(text_embedding_function)
+
+        # 3. create bm25 function
+        bm25_function = Function(
+            name="bm25",
+            input_field_names=["document"],
+            output_field_names="sparse_vector",
+            function_type=FunctionType.BM25,
+        )
+        schema.add_function(bm25_function)
+
+        # 4. create index params
+        index_params = self.prepare_index_params(client)[0]
+        # create dense index
+        index_params.add_index(field_name="dense", index_type="FLAT", metric_type="L2")
+        # create sparse index
+        index_params.add_index(
+            field_name="sparse_vector",
+            index_name="sparse_inverted_index",
+            index_type="SPARSE_INVERTED_INDEX",
+            metric_type="BM25",
+            params={"bm25_k1": 1.2, "bm25_b": 0.75},
+        )
+
+        # 5. create collection
+        self.create_collection(
+            client, 
+            collection_name,
+            dimension=1536,
+            schema=schema,
+            index_params=index_params,
+            consistency_level="Strong",
+        )
+
+        # 6. insert data
+        rows = [
+            {"document": "Artificial intelligence helps medical breakthroughs."},
+            {"document": "Analysis of artificial intelligence trends in 2023"},
+            {"document": "Artificial intelligence ethical disputes continue to ferment"},
+            {"document": "The latest progress in deep learning technology"},
+        ]
+        self.insert(client, collection_name, rows)
+        
+        # 7. prepare queries
+        queries = ["AI Research Progress", "What is AI"]
+        
+        # 8. create ranker function for model rerank
+        ranker = Function(
+            name="rerank_model",
+            input_field_names=["document"],  # must be varchar field
+            function_type=FunctionType.RERANK,
+            params={
+                "reranker": "model",
+                "provider": "vllm",  # support tei and vllm
+                "queries": queries,  # queries must match nq
+                "endpoint": "https://competent_leakey.orb.local",
+                # "maxBatch": 100
+            },
+        )
+        
+        # 9. test search with ranker
+        search_result = self.search(
+            client,
+            collection_name,
+            data=queries,
+            anns_field="dense",
+            limit=5,
+            output_fields=["document"],
+            ranker=ranker,
+            consistency_level="Strong",
+            check_task=CheckTasks.check_search_results,
+            check_items={"enable_milvus_client_api": True,
+                        "nq": len(queries),
+                        "limit": 5}
+        )
+        
+        # 10. test hybrid search with ranker
+        dense_search_param = {
+            "data": queries,
+            "anns_field": "dense",
+            "param": {},
+            "limit": 5,
+        }
+        dense = AnnSearchRequest(**dense_search_param)
+
+        sparse_search_param = {
+            "data": queries,
+            "anns_field": "sparse_vector", 
+            "param": {},
+            "limit": 5,
+        }
+        sparse = AnnSearchRequest(**sparse_search_param)
+
+        # test hybrid search
+        hybrid_result = client.hybrid_search(
+            collection_name, [dense, sparse], ranker=ranker, limit=5, output_fields=["document"]
+        )
+        
+        # verify hybrid search results
+        assert hybrid_result is not None
+        assert len(hybrid_result) == len(queries)
+        for hits in hybrid_result:
+            assert hits is not None
+            for hit in hits:
+                assert "document" in hit.entity
+                
+        # 11. cleanup
+        self.drop_collection(client, collection_name)
+

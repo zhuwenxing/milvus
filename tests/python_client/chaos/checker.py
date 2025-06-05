@@ -365,13 +365,18 @@ class Checker:
         p_name = partition_name if partition_name is not None else "_default"
         self.p_name = p_name
         self.p_names = [self.p_name] if partition_name is not None else None
-        schema = cf.gen_all_datatype_collection_schema(dim=dim) if schema is None else schema
+        if self.milvus_client.has_collection(c_name):
+            c, _ = self.c_wrap.init_collection(c_name)
+            schema = c.schema
+        else:
+            schema = cf.gen_all_datatype_collection_schema(dim=dim) if schema is None else schema
         self.schema = schema
         self.dim = cf.get_dim_by_schema(schema=schema)
         self.int64_field_name = cf.get_int64_field_name(schema=schema)
         self.text_field_name = cf.get_text_field_name(schema=schema)
         self.text_match_field_name_list = cf.get_text_match_field_name(schema=schema)
         self.float_vector_field_name = cf.get_float_vec_field_name(schema=schema)
+
         self.c_wrap.init_collection(name=c_name,
                                     schema=schema,
                                     shards_num=shards_num,
