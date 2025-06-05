@@ -960,7 +960,8 @@ class InsertChecker(Checker):
 
     @trace()
     def insert_entities(self):
-        data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=self.schema)
+        schema = self.get_schema()
+        data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=schema)
         rows = len(data)
         ts_data = []
         for i in range(constants.DELTA_PER_INS):
@@ -1037,7 +1038,8 @@ class InsertFreshnessChecker(Checker):
         self.file_name = f"/tmp/ci_logs/insert_data_{uuid.uuid4()}.parquet"
 
     def insert_entities(self):
-        data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=self.schema)
+        schema = self.get_schema()
+        data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=schema)
         ts_data = []
         for i in range(constants.DELTA_PER_INS):
             time.sleep(0.001)
@@ -1084,7 +1086,8 @@ class UpsertChecker(Checker):
         if collection_name is None:
             collection_name = cf.gen_unique_str("UpsertChecker_")
         super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
-        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=self.schema)
+        schema = self.get_schema()
+        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=schema)
 
     @trace()
     def upsert_entities(self):
@@ -1100,7 +1103,8 @@ class UpsertChecker(Checker):
         # half of the data is upsert, the other half is insert
         rows = len(self.data)
         pk_old = [d[self.int64_field_name] for d in self.data[:rows // 2]]
-        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=self.schema)
+        schema = self.get_schema()
+        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=schema)
         pk_new = [d[self.int64_field_name] for d in self.data[rows // 2:]]
         pk_update = pk_old + pk_new
         for i in range(rows):
@@ -1123,7 +1127,8 @@ class UpsertFreshnessChecker(Checker):
         if collection_name is None:
             collection_name = cf.gen_unique_str("UpsertChecker_")
         super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
-        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=self.schema)
+        schema = self.get_schema()
+        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=schema)
 
     def upsert_entities(self):
 
@@ -1148,7 +1153,8 @@ class UpsertFreshnessChecker(Checker):
         # half of the data is upsert, the other half is insert
         rows = len(self.data[0])
         pk_old = self.data[0][:rows // 2]
-        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=self.schema)
+        schema = self.get_schema()
+        self.data = cf.gen_row_data_by_schema(nb=constants.DELTA_PER_INS, schema=schema)
         pk_new = self.data[0][rows // 2:]
         pk_update = pk_old + pk_new
         self.data[0] = pk_update
