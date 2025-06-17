@@ -19,7 +19,7 @@ DIMENSION = 128
 INSERT_BATCH_SIZE = 1000
 DELETE_BATCH_SIZE = 500
 UPSERT_BATCH_SIZE = 300
-COLLECTION_NAME_PREFIX = "mt_checker"
+COLLECTION_NAME_PREFIX = "data_correctness_checker"
 
 _global_id: int = 0
 _id_lock = threading.Lock()
