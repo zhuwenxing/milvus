@@ -167,6 +167,7 @@ def main():
         uri=args.uri,
         token=args.token,
         pg_conn_str=args.pg_conn,
+        ignore_vector=True,
     )
     collection_name = f"{COLLECTION_NAME_PREFIX}_{int(time.time())}"
     logger.info(f"Using collection: {collection_name}")
