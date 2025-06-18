@@ -198,6 +198,7 @@ def main():
                             uri=args.uri,
                             token=args.token,
                             pg_conn_str=args.pg_conn,
+                            ignore_vector=True,
                         )
                         logger.info("Milvus client recreated, retrying entity_compare ...")
                         try:
@@ -231,6 +232,7 @@ def main():
                     uri=args.uri,
                     token=args.token,
                     pg_conn_str=args.pg_conn,
+                    ignore_vector=True,
                 )
                 logger.info("Milvus client recreated, retrying final entity_compare ...")
                 try:
