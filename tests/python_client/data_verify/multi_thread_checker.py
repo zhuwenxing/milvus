@@ -104,6 +104,7 @@ def worker_loop(client: MilvusClient, collection: str, args=None):
                         uri=args.uri,
                         token=args.token,
                         pg_conn_str=args.pg_conn,
+                        ignore_vector=True,
                     )
                     logger.info(f"[Worker {threading.current_thread().name}] Milvus client recreated, retrying {op.__name__} ...")
                     try:
