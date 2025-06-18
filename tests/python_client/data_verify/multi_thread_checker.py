@@ -6,29 +6,33 @@ import random
 import threading
 import time
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from pymilvus import DataType
 from pymilvus.milvus_client import IndexParams
 
 from pymilvus_pg import MilvusPGClient as MilvusClient
 from pymilvus_pg import logger
-from pymilvus.exceptions import MilvusException  # 导入 Milvus 异常
 
-load_dotenv()
+# load_dotenv()
 
-DIMENSION = 128
+# ---------------------------- 默认配置 ---------------------------
+DIMENSION = 8  # 向量维度
 INSERT_BATCH_SIZE = 1000
 DELETE_BATCH_SIZE = 500
 UPSERT_BATCH_SIZE = 300
-COLLECTION_NAME_PREFIX = "data_correctness_checker"
+COLLECTION_NAME_PREFIX = "mt_checker"
 
+# 全局主键计数，以及线程安全锁
 _global_id: int = 0
 _id_lock = threading.Lock()
+
+# 事件，用于控制线程暂停/停止
 pause_event = threading.Event()
 stop_event = threading.Event()
 
 
 def _next_id_batch(count: int) -> list[int]:
+    """返回一个连续 id 列表，并安全地递增全局计数。"""
     global _global_id
     with _id_lock:
         start = _global_id
@@ -37,6 +41,7 @@ def _next_id_batch(count: int) -> list[int]:
 
 
 def _generate_data(id_list: list[int], for_upsert: bool = False):
+    """根据 id 列表生成记录。"""
     data = []
     for _id in id_list:
         record = {
@@ -52,41 +57,56 @@ def _generate_data(id_list: list[int], for_upsert: bool = False):
 
 
 def _insert_op(client: MilvusClient, collection: str):
-    # Let exceptions propagate to worker_loop for unified handling
-    ids = _next_id_batch(INSERT_BATCH_SIZE)
-    client.insert(collection, _generate_data(ids))
-    logger.info(f"[INSERT] {len(ids)} rows, start id {ids[0]}")
+    """Insert operation with exception handling to ensure thread stability."""
+    try:
+        ids = _next_id_batch(INSERT_BATCH_SIZE)
+        client.insert(collection, _generate_data(ids))
+        logger.info(f"[INSERT] {len(ids)} rows, start id {ids[0]}")
+    except Exception as e:
+        logger.error(f"[INSERT] Exception occurred: {e}")
+        # Exception is caught to prevent thread exit
+
 
 
 def _delete_op(client: MilvusClient, collection: str):
+    """Delete operation with exception handling to ensure thread stability."""
     global _global_id
-    # Let exceptions propagate to worker_loop for unified handling
-    if _global_id == 0:
-        return
-    start = random.randint(0, max(1, _global_id - DELETE_BATCH_SIZE))
-    ids = list(range(start, start + DELETE_BATCH_SIZE))
-    client.delete(collection, ids=ids)
-    logger.info(f"[DELETE] {len(ids)} rows, start id {start}")
+    try:
+        # Only delete if there is existing data
+        if _global_id == 0:
+            return
+        # Randomly select a range of ids
+        start = random.randint(0, max(1, _global_id - DELETE_BATCH_SIZE))
+        ids = list(range(start, start + DELETE_BATCH_SIZE))
+        client.delete(collection, ids=ids)
+        logger.info(f"[DELETE] {len(ids)} rows, start id {start}")
+    except Exception as e:
+        logger.error(f"[DELETE] Exception occurred: {e}")
+        # Exception is caught to prevent thread exit
+
 
 
 def _upsert_op(client: MilvusClient, collection: str):
+    """Upsert operation with exception handling to ensure thread stability."""
     global _global_id
-    # Let exceptions propagate to worker_loop for unified handling
-    if _global_id == 0:
-        return
-    start = random.randint(0, max(1, _global_id - UPSERT_BATCH_SIZE))
-    ids = list(range(start, start + UPSERT_BATCH_SIZE))
-    client.upsert(collection, _generate_data(ids, for_upsert=True))
-    logger.info(f"[UPSERT] {len(ids)} rows, start id {start}")
+    try:
+        if _global_id == 0:
+            return
+        start = random.randint(0, max(1, _global_id - UPSERT_BATCH_SIZE))
+        ids = list(range(start, start + UPSERT_BATCH_SIZE))
+        client.upsert(collection, _generate_data(ids, for_upsert=True))
+        logger.info(f"[UPSERT] {len(ids)} rows, start id {start}")
+    except Exception as e:
+        logger.error(f"[UPSERT] Exception occurred: {e}")
+        # Exception is caught to prevent thread exit
+
 
 
 OPERATIONS = [_insert_op, _delete_op, _upsert_op]
 
 
-def worker_loop(client: MilvusClient, collection: str, args=None):
-    """
-    Worker thread main loop. If Milvus client becomes unavailable, automatically recreate and retry the operation.
-    """
+def worker_loop(client: MilvusClient, collection: str):
+    """工作线程：循环执行随机写操作。"""
     while not stop_event.is_set():
         if pause_event.is_set():
             time.sleep(0.1)
@@ -94,31 +114,9 @@ def worker_loop(client: MilvusClient, collection: str, args=None):
         op = random.choice(OPERATIONS)
         try:
             op(client, collection)
-        except MilvusException as me:
-            # Detect if the error is due to UNAVAILABLE connection
-            if "StatusCode.UNAVAILABLE" in str(me) and "failed to connect to all addresses" in str(me):
-                logger.error(f"[Worker {threading.current_thread().name}] MilvusException UNAVAILABLE in {op.__name__}: {me}")
-                if args is not None:
-                    # Recreate client with latest config
-                    client = MilvusClient(
-                        uri=args.uri,
-                        token=args.token,
-                        pg_conn_str=args.pg_conn,
-                        ignore_vector=True,
-                    )
-                    logger.info(f"[Worker {threading.current_thread().name}] Milvus client recreated, retrying {op.__name__} ...")
-                    try:
-                        # Ensure collection is loaded for new client
-                        client.load_collection(collection)
-                        op(client, collection)
-                    except Exception as retry_e:
-                        logger.exception(f"[Worker {threading.current_thread().name}] Retry {op.__name__} failed: {retry_e}")
-                else:
-                    logger.error(f"[Worker {threading.current_thread().name}] Cannot recreate client, args not provided.")
-            else:
-                logger.exception(f"[Worker {threading.current_thread().name}] MilvusException during {op.__name__}")
-        except Exception as e:
-            logger.exception(f"[Worker {threading.current_thread().name}] Error during {op.__name__}: {e}")
+        except Exception:  # noqa: BLE001
+            logger.exception(f"Error during {op.__name__}")
+        # 小睡眠降低压力
         time.sleep(random.uniform(0.05, 0.2))
 
 
@@ -168,16 +166,15 @@ def main():
         uri=args.uri,
         token=args.token,
         pg_conn_str=args.pg_conn,
-        ignore_vector=True,
     )
     collection_name = f"{COLLECTION_NAME_PREFIX}_{int(time.time())}"
     logger.info(f"Using collection: {collection_name}")
     create_collection(client, collection_name)
 
+    # 启动写线程
     threads: list[threading.Thread] = []
     for i in range(args.threads):
-        # Pass args to worker_loop for client recreation
-        t = threading.Thread(target=worker_loop, name=f"Writer-{i}", args=(client, collection_name, args), daemon=True)
+        t = threading.Thread(target=worker_loop, name=f"Writer-{i}", args=(client, collection_name), daemon=True)
         t.start()
         threads.append(t)
 
@@ -188,31 +185,16 @@ def main():
             if time.time() - last_compare >= args.compare_interval:
                 logger.info("Pausing writers for entity compare …")
                 pause_event.set()
+                # 等待在途操作完成
                 time.sleep(2)
                 try:
                     client.entity_compare(collection_name)
-                except MilvusException as e:
-                    # 检查是否为连接不可用的异常
-                    if "StatusCode.UNAVAILABLE" in str(e) and "failed to connect to all addresses" in str(e):
-                        logger.error(f"MilvusException UNAVAILABLE, will recreate client: {e}")
-                        client = MilvusClient(
-                            uri=args.uri,
-                            token=args.token,
-                            pg_conn_str=args.pg_conn,
-                            ignore_vector=True,
-                        )
-                        logger.info("Milvus client recreated, retrying entity_compare ...")
-                        try:
-                            client.entity_compare(collection_name)
-                        except Exception as retry_e:
-                            logger.exception(f"Retry entity_compare failed: {retry_e}")
-                    else:
-                        logger.exception("MilvusException during entity_compare")
                 except Exception:
                     logger.exception("Error during entity_compare")
                 last_compare = time.time()
                 pause_event.clear()
                 logger.info("Writers resumed")
+            # 检查 duration
             if args.duration > 0 and time.time() - start_time >= args.duration:
                 logger.info(f"Duration reached ({args.duration}s), stopping …")
                 break
@@ -225,23 +207,6 @@ def main():
         logger.info("Finished. Final compare …")
         try:
             client.entity_compare(collection_name)
-        except MilvusException as e:
-            # 检查是否为连接不可用的异常
-            if "StatusCode.UNAVAILABLE" in str(e) and "failed to connect to all addresses" in str(e):
-                logger.error(f"MilvusException UNAVAILABLE, will recreate client: {e}")
-                client = MilvusClient(
-                    uri=args.uri,
-                    token=args.token,
-                    pg_conn_str=args.pg_conn,
-                    ignore_vector=True,
-                )
-                logger.info("Milvus client recreated, retrying final entity_compare ...")
-                try:
-                    client.entity_compare(collection_name)
-                except Exception as retry_e:
-                    logger.exception(f"Retry final entity_compare failed: {retry_e}")
-            else:
-                logger.exception("MilvusException during final entity_compare")
         except Exception:
             logger.exception("Final entity_compare failed")
 
