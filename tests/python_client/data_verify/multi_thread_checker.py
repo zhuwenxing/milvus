@@ -20,7 +20,7 @@ DIMENSION = 8  # 向量维度
 INSERT_BATCH_SIZE = 1000
 DELETE_BATCH_SIZE = 500
 UPSERT_BATCH_SIZE = 300
-COLLECTION_NAME_PREFIX = "mt_checker"
+COLLECTION_NAME_PREFIX = "data_correctness_checker"
 
 # 全局主键计数，以及线程安全锁
 _global_id: int = 0
