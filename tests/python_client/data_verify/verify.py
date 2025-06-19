@@ -19,7 +19,7 @@ def main():
     collections = milvus_client.list_collections()
     for collection in collections:
         if collection.startswith(args.collection_name_prefix):
-            milvus_client.entity_compare(collection, full_scan=True)
+            milvus_client.entity_compare(collection, batch_size = 10000, full_scan=True)
 
 if __name__ == "__main__":
     main()
