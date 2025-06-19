@@ -16,7 +16,7 @@ from pymilvus_pg import logger
 # load_dotenv()
 
 # ---------------------------- 默认配置 ---------------------------
-DIMENSION = 8  # 向量维度
+DIMENSION = 128 # 向量维度
 INSERT_BATCH_SIZE = 1000
 DELETE_BATCH_SIZE = 500
 UPSERT_BATCH_SIZE = 300
@@ -166,6 +166,7 @@ def main():
         uri=args.uri,
         token=args.token,
         pg_conn_str=args.pg_conn,
+        ignore_vector=True
     )
     collection_name = f"{COLLECTION_NAME_PREFIX}_{int(time.time())}"
     logger.info(f"Using collection: {collection_name}")
