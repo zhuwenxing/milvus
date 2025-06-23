@@ -55,7 +55,7 @@ class CustomResourceOperations(object):
         except ApiException as e:
             if raise_ex:
                 log.error("Exception when calling CustomObjectsApi->delete_namespaced_custom_object: %s\n" % e)
-                raise Exception(str(e))
+                # raise Exception(str(e))
 
     def patch(self, metadata_name, body):
         """patch a custom resource in k8s"""
