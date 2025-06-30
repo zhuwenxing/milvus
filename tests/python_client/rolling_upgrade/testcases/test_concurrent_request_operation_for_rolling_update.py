@@ -38,7 +38,6 @@ class TestOperations(TestBase):
                 port=port,
                 user=user,
                 password=password,
-                secure=True,
             )
         else:
             connections.connect("default", host=host, port=port)

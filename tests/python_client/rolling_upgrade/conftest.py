@@ -9,7 +9,7 @@ delete_timeout = 60
 def pytest_addoption(parser):
     parser.addoption(
         "--data_size",
-        type="int",
+        type=int,
         action="store",
         default=3000,
         help="data size for deploy test",
@@ -51,11 +51,13 @@ def pytest_addoption(parser):
     )
     parser.addoption(
         "--paused_duration",
-        type="int",
+        type=int,
         action="store",
         default=300,
         help="paused duration for rolling update in some components",
     )
+    parser.addoption("--is_check", action="store", type=bool, default=False, help="is_check")
+    parser.addoption("--prepare_data", action="store", type=bool, default=False, help="prepare_data")
 
 
 @pytest.fixture
@@ -91,3 +93,13 @@ def paused_components(request):
 @pytest.fixture
 def paused_duration(request):
     return request.config.getoption("--paused_duration")
+
+
+@pytest.fixture
+def is_check(request):
+    return request.config.getoption("--is_check")
+
+
+@pytest.fixture
+def prepare_data(request):
+    return request.config.getoption("--prepare_data")
