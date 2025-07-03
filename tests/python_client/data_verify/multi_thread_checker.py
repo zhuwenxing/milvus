@@ -17,9 +17,9 @@ from pymilvus_pg import logger
 
 # ---------------------------- Default Configuration ---------------------------
 DIMENSION = 128  # Vector dimension
-INSERT_BATCH_SIZE = 1000
-DELETE_BATCH_SIZE = 500
-UPSERT_BATCH_SIZE = 300
+INSERT_BATCH_SIZE = 5000
+DELETE_BATCH_SIZE = 2000
+UPSERT_BATCH_SIZE = 1000
 COLLECTION_NAME_PREFIX = "data_correctness_checker"
 
 # Global primary key counter and thread-safe lock
@@ -163,7 +163,7 @@ def main():
         uri=args.uri,
         token=args.token,
         pg_conn_str=args.pg_conn,
-        ignore_vector=True
+        sample_vector=True,
     )
     collection_name = f"{COLLECTION_NAME_PREFIX}_{int(time.time())}"
     logger.info(f"Using collection: {collection_name}")
