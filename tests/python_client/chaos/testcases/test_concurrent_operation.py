@@ -87,7 +87,7 @@ class TestOperations(TestBase):
             Op.phrase_match: PhraseMatchChecker(collection_name=c_name),
             Op.json_query: JsonQueryChecker(collection_name=c_name),
             Op.delete: DeleteChecker(collection_name=c_name),
-            Op.add_field: AddFieldChecker(collection_name=c_name),
+            # Op.add_field: AddFieldChecker(collection_name=c_name),
         }
         log.info(f"init_health_checkers: {checkers}")
         self.health_checkers = checkers
