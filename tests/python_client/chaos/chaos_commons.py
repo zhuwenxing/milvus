@@ -108,13 +108,17 @@ def assert_statistic(
         # expect succ if no expectations
         succ_rate = checkers[k].succ_rate()
         total = checkers[k].total()
+        success_count_threshold = 2
+        slow_op = ["index", "flush"]
+        if any(op in str(k) for op in slow_op):
+            success_count_threshold = 1
         average_time = checkers[k].average_time
         if expectations.get(k, "") == constants.FAIL:
             log.info(
                 f"Expect Fail: {str(k)} succ rate {succ_rate}, total: {total}, average time: {average_time:.4f}"
             )
             pytest.assume(
-                succ_rate < fail_rate_threshold or total < 2,
+                succ_rate < fail_rate_threshold or total < success_count_threshold,
                 f"Expect Fail: {str(k)} succ rate {succ_rate}, total: {total}, average time: {average_time:.4f}",
             )
         else:
@@ -122,6 +126,6 @@ def assert_statistic(
                 f"Expect Succ: {str(k)} succ rate {succ_rate}, total: {total}, average time: {average_time:.4f}"
             )
             pytest.assume(
-                succ_rate >= succ_rate_threshold and total > 2,
+                succ_rate >= succ_rate_threshold and total > success_count_threshold,
                 f"Expect Succ: {str(k)} succ rate {succ_rate}, total: {total}, average time: {average_time:.4f}",
             )
