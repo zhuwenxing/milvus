@@ -878,8 +878,7 @@ class TestCreateImportJob(TestBase):
     @pytest.mark.skip("stats task will generate a new segment, "
                       "using collectionID as prefix will import twice as much data")
     def test_job_import_binlog_file_type(self, nb, dim, insert_round, auto_id,
-                                                      is_partition_key, enable_dynamic_schema, bucket_name, root_path):
-        # todo: copy binlog file to backup bucket
+                                                      is_partition_key, enable_dynamic_schema, root_path):
         """
         Insert a vector with a simple payload
         """
@@ -968,6 +967,44 @@ class TestCreateImportJob(TestBase):
             rsp = self.vector_client.vector_insert(payload)
             assert rsp['code'] == 0
             assert rsp['data']['insertCount'] == nb
+        
+        # Create restore collection using the SAME schema as original (without add field)
+        restore_collection_name = f"{name}_restore"
+        restore_payload = {
+            "collectionName": restore_collection_name,
+            "schema": {
+                "autoId": auto_id,
+                "enableDynamicField": enable_dynamic_schema,
+                "fields": [
+                    {"fieldName": "book_id", "dataType": "Int64", "isPrimary": True, "elementTypeParams": {}},
+                    {"fieldName": "user_id", "dataType": "Int64", "isPartitionKey": is_partition_key,
+                     "elementTypeParams": {}},
+                    {"fieldName": "word_count", "dataType": "Int64", "elementTypeParams": {}},
+                    {"fieldName": "book_describe", "dataType": "VarChar", "elementTypeParams": {"max_length": "256"}},
+                    {"fieldName": "bool", "dataType": "Bool", "elementTypeParams": {}},
+                    {"fieldName": "json", "dataType": "JSON", "elementTypeParams": {}},
+                    {"fieldName": "int_array", "dataType": "Array", "elementDataType": "Int64",
+                     "elementTypeParams": {"max_capacity": "1024"}},
+                    {"fieldName": "varchar_array", "dataType": "Array", "elementDataType": "VarChar",
+                     "elementTypeParams": {"max_capacity": "1024", "max_length": "256"}},
+                    {"fieldName": "bool_array", "dataType": "Array", "elementDataType": "Bool",
+                     "elementTypeParams": {"max_capacity": "1024"}},
+                    {"fieldName": "nullable_rating", "dataType": "Int64", "nullable": True, "elementTypeParams": {}},
+                    {"fieldName": "nullable_comment", "dataType": "VarChar", "nullable": True, "elementTypeParams": {"max_length": "512"}},
+                    {"fieldName": "default_status", "dataType": "Int64", "defaultValue": 1, "elementTypeParams": {}},
+                    {"fieldName": "default_category", "dataType": "VarChar", "defaultValue": "uncategorized", "elementTypeParams": {"max_length": "128"}},
+                    {"fieldName": "text_emb", "dataType": "FloatVector", "elementTypeParams": {"dim": f"{dim}"}},
+                    {"fieldName": "image_emb", "dataType": "FloatVector", "elementTypeParams": {"dim": f"{dim}"}},
+                ]
+            },
+            "indexParams": [
+                {"fieldName": "text_emb", "indexName": "text_emb", "metricType": "L2"},
+                {"fieldName": "image_emb", "indexName": "image_emb", "metricType": "L2"}
+            ]
+        }
+        rsp = self.collection_client.collection_create(restore_payload)
+        assert rsp['code'] == 0
+        
         # flush data to generate binlog file
         c = Collection(name)
         c.flush()
@@ -989,7 +1026,8 @@ class TestCreateImportJob(TestBase):
                        # f"{bucket_name}/{root_path}/delta_log/{collection_id}/"
                        ]],
             "options": {
-                "backup": "true"
+                "backup": "true",
+                "storage_version": "2"
             }
 
         }
@@ -1018,7 +1056,27 @@ class TestCreateImportJob(TestBase):
                     assert False, "import job timeout"
         time.sleep(10)
         c_restore = Collection(restore_collection_name)
-        assert c.num_entities == c_restore.num_entities
+        # since we import both original and sorted segments, the number of entities should be 2x
+        assert c.num_entities * 2 == c_restore.num_entities
+        
+        # Verify nullable and default were properly imported
+        rsp = self.vector_client.vector_query({
+            "collectionName": restore_collection_name, 
+            "filter": "user_id >= 0", 
+            "outputFields": ["user_id", "nullable_rating", "nullable_comment", "default_status", "default_category"],
+            "limit": 20
+        })
+        assert rsp['code'] == 0
+        
+        # Check records from original data
+        original_records = [r for r in rsp['data'] if r['user_id'] < nb * insert_round]
+        for record in original_records[:3]:  # Check first 3 original records
+            # Verify default values are applied when fields were omitted
+            if 'default_status' in record and record['default_status'] is not None:
+                assert record['default_status'] in [1, 5]  # default or explicit value
+            if 'default_category' in record and record['default_category'] is not None:
+                assert record['default_category'] in ['uncategorized', 'special']  # default or explicit value
+
 
     def test_import_json_with_nullable_fields(self):
         """Test JSON import with nullable and default_value fields - fields should be auto-filled"""
@@ -2316,7 +2374,6 @@ class TestCreateImportJobNegative(TestBase):
 
         json_data = json.dumps(data, cls=NumpyEncoder)
 
-        # 将JSON数据保存到txt文件
         with open(file_path, 'w') as file:
             file.write(json_data)
         # upload file to minio storage
