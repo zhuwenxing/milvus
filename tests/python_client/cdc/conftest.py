@@ -18,19 +18,19 @@ logger = logging.getLogger(__name__)
 
 def pytest_addoption(parser):
     """Add command line options for pytest."""
-    parser.addoption("--upstream-uri", action="store", default="http://10.104.21.33:19530",
+    parser.addoption("--upstream-uri", action="store", default="http://10.104.15.50:19530",
                      help="Upstream Milvus uri")
     parser.addoption("--upstream-token", action="store", default="root:Milvus",
                      help="Upstream Milvus token")
-    parser.addoption("--downstream-uri", action="store", default="http://10.104.23.111:19530",
+    parser.addoption("--downstream-uri", action="store", default="http://10.104.15.49:19530",
                      help="Downstream Milvus uri")
     parser.addoption("--downstream-token", action="store", default="root:Milvus",
                      help="Downstream Milvus token")
     parser.addoption("--sync-timeout", action="store", default="120",
                      help="Sync timeout in seconds")
-    parser.addoption("--source-cluster-id", action="store", default="cdc-test-source",
+    parser.addoption("--source-cluster-id", action="store", default="cdc-test-source-0918",
                      help="Source cluster ID for CDC topology")
-    parser.addoption("--target-cluster-id", action="store", default="cdc-test-target",
+    parser.addoption("--target-cluster-id", action="store", default="cdc-test-target-0918",
                      help="Target cluster ID for CDC topology")
     parser.addoption("--pchannel-num", action="store", default="16",
                      help="Number of physical channels for CDC")

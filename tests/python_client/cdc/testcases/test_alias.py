@@ -67,7 +67,7 @@ class TestCDCSyncAlias(TestCDCSyncBase):
         logger.info(f"Creating collection: {collection_name}")
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         logger.info(f"Collection {collection_name} created in upstream")
 
@@ -151,7 +151,7 @@ class TestCDCSyncAlias(TestCDCSyncBase):
         logger.info(f"Creating collection: {collection_name}")
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         logger.info(f"Collection {collection_name} created in upstream")
 
@@ -230,14 +230,14 @@ class TestCDCSyncAlias(TestCDCSyncBase):
         logger.info(f"Creating old collection: {old_collection}")
         upstream_client.create_collection(
             collection_name=old_collection,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         logger.info(f"Old collection {old_collection} created in upstream")
 
         logger.info(f"Creating new collection: {new_collection}")
         upstream_client.create_collection(
             collection_name=new_collection,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         logger.info(f"New collection {new_collection} created in upstream")
 

@@ -3,7 +3,7 @@ CDC sync tests for partition operations.
 """
 
 import time
-from base import TestCDCSyncBase, logger
+from .base import TestCDCSyncBase
 
 
 class TestCDCSyncPartition(TestCDCSyncBase):
@@ -39,7 +39,7 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
 
         # Wait for creation to sync
@@ -79,7 +79,7 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection and partition
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         upstream_client.create_partition(collection_name, partition_name)
 
@@ -124,11 +124,11 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection, partition, and index
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         upstream_client.create_partition(collection_name, partition_name)
 
-        # Create index (required for loading)
+        # Create index and load collection (required for querying/searching)
         index_params = upstream_client.prepare_index_params()
         index_params.add_index(
             field_name="vector",
@@ -136,6 +136,7 @@ class TestCDCSyncPartition(TestCDCSyncBase):
             metric_type="L2"
         )
         upstream_client.create_index(collection_name, index_params)
+        upstream_client.load_collection(collection_name)
 
         # Wait for setup to sync
         def check_setup():
@@ -182,10 +183,11 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection, partition, index, and load
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         upstream_client.create_partition(collection_name, partition_name)
 
+        # Create index and load collection (required for querying/searching)
         index_params = upstream_client.prepare_index_params()
         index_params.add_index(
             field_name="vector",
@@ -193,6 +195,7 @@ class TestCDCSyncPartition(TestCDCSyncBase):
             metric_type="L2"
         )
         upstream_client.create_index(collection_name, index_params)
+        upstream_client.load_collection(collection_name)
         upstream_client.load_partitions(collection_name, [partition_name])
 
         # Wait for setup to sync
@@ -247,9 +250,19 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection and partition
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         upstream_client.create_partition(collection_name, partition_name)
+
+        # Create index and load collection (required for querying/searching)
+        index_params = upstream_client.prepare_index_params()
+        index_params.add_index(
+            field_name="vector",
+            index_type="AUTOINDEX",
+            metric_type="L2"
+        )
+        upstream_client.create_index(collection_name, index_params)
+        upstream_client.load_collection(collection_name)
 
         # Wait for setup to sync
         def check_setup():
@@ -301,9 +314,19 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection and partition
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
         upstream_client.create_partition(collection_name, partition_name)
+
+        # Create index and load collection (required for querying/searching)
+        index_params = upstream_client.prepare_index_params()
+        index_params.add_index(
+            field_name="vector",
+            index_type="AUTOINDEX",
+            metric_type="L2"
+        )
+        upstream_client.create_index(collection_name, index_params)
+        upstream_client.load_collection(collection_name)
 
         # Wait for setup to sync
         def check_setup():

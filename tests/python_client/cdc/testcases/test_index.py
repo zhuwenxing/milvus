@@ -3,7 +3,7 @@ CDC sync tests for index operations.
 """
 
 import time
-from base import TestCDCSyncBase, logger
+from .base import TestCDCSyncBase, logger
 
 
 class TestCDCSyncIndex(TestCDCSyncBase):
@@ -38,7 +38,7 @@ class TestCDCSyncIndex(TestCDCSyncBase):
         # Create collection
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
 
         # Wait for creation to sync
@@ -80,7 +80,7 @@ class TestCDCSyncIndex(TestCDCSyncBase):
         # Create collection and index
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
 
         index_params = upstream_client.prepare_index_params()

@@ -3,7 +3,7 @@ CDC sync tests for collection DDL operations.
 """
 
 import time
-from base import TestCDCSyncBase, logger
+from .base import TestCDCSyncBase, logger
 
 
 class TestCDCSyncCollection(TestCDCSyncBase):
@@ -44,12 +44,12 @@ class TestCDCSyncCollection(TestCDCSyncBase):
             self.log_operation("CREATE_COLLECTION", "collection", collection_name, "upstream")
 
             # Create collection in upstream
-            schema_params = self.create_default_schema()
-            logger.info(f"[SCHEMA] Collection schema: {schema_params}")
+            schema = self.create_default_schema(upstream_client)
+            logger.info(f"[SCHEMA] Collection schema: {schema}")
 
             upstream_client.create_collection(
                 collection_name=collection_name,
-                **schema_params
+                schema=schema
             )
 
             # Verify upstream creation
@@ -100,7 +100,7 @@ class TestCDCSyncCollection(TestCDCSyncBase):
             self.log_operation("CREATE_COLLECTION", "collection", collection_name, "upstream")
             upstream_client.create_collection(
                 collection_name=collection_name,
-                **self.create_default_schema()
+                schema=self.create_default_schema(upstream_client)
             )
 
             # Wait for creation to sync
@@ -142,37 +142,75 @@ class TestCDCSyncCollection(TestCDCSyncBase):
 
     def test_rename_collection(self, upstream_client, downstream_client, sync_timeout):
         """Test RENAME_COLLECTION operation sync."""
-        # Store upstream client for teardown
-        self._upstream_client = upstream_client
+        start_time = time.time()
 
         old_name = self.gen_unique_name("test_col_rename_old")
         new_name = self.gen_unique_name("test_col_rename_new")
+
+        # Log test start
+        self.log_test_start("test_rename_collection", "RENAME_COLLECTION", f"{old_name} -> {new_name}")
+
+        # Store upstream client for teardown
+        self._upstream_client = upstream_client
         self.resources_to_cleanup.append(('collection', old_name))
         self.resources_to_cleanup.append(('collection', new_name))
 
-        # Initial cleanup
-        self.cleanup_collection(upstream_client, old_name)
-        self.cleanup_collection(upstream_client, new_name)
+        try:
+            # Initial cleanup
+            self.cleanup_collection(upstream_client, old_name)
+            self.cleanup_collection(upstream_client, new_name)
 
-        # Create collection
-        upstream_client.create_collection(
-            collection_name=old_name,
-            **self.create_default_schema()
-        )
+            # Create collection first
+            self.log_operation("CREATE_COLLECTION", "collection", old_name, "upstream")
+            upstream_client.create_collection(
+                collection_name=old_name,
+                schema=self.create_default_schema(upstream_client)
+            )
 
-        # Wait for creation to sync
-        def check_create():
-            return downstream_client.has_collection(old_name)
-        assert self.wait_for_sync(check_create, sync_timeout, f"create collection {old_name}")
+            # Wait for creation to sync
+            def check_create():
+                return downstream_client.has_collection(old_name)
+            assert self.wait_for_sync(check_create, sync_timeout, f"create collection {old_name}")
 
-        # Rename collection
-        upstream_client.rename_collection(old_name, new_name)
-        assert not upstream_client.has_collection(old_name)
-        assert upstream_client.has_collection(new_name)
+            # Rename collection
+            rename_start_time = time.time()
+            self.log_operation("RENAME_COLLECTION", "collection", f"{old_name} -> {new_name}", "upstream")
 
-        # Wait for rename to sync
-        def check_rename():
-            return (not downstream_client.has_collection(old_name) and
-                    downstream_client.has_collection(new_name))
+            try:
+                upstream_client.rename_collection(old_name, new_name)
+                rename_duration = time.time() - rename_start_time
+                logger.info(f"[SUCCESS] Rename operation completed in {rename_duration:.2f}s")
+            except Exception as e:
+                rename_duration = time.time() - rename_start_time
+                logger.error(f"[FAILED] Rename operation failed after {rename_duration:.2f}s: {e}")
+                raise
 
-        assert self.wait_for_sync(check_rename, sync_timeout, f"rename collection {old_name} to {new_name}")
+            # Verify rename in upstream
+            old_exists = upstream_client.has_collection(old_name)
+            new_exists = upstream_client.has_collection(new_name)
+            self.log_resource_state("collection", old_name, "missing" if not old_exists else "exists", "upstream")
+            self.log_resource_state("collection", new_name, "exists" if new_exists else "missing", "upstream")
+
+            assert not old_exists, f"Old collection {old_name} still exists after rename"
+            assert new_exists, f"New collection {new_name} not found after rename"
+
+            # Log sync verification start
+            self.log_sync_verification("RENAME_COLLECTION", f"{old_name} -> {new_name}", "completed in downstream")
+
+            # Wait for rename to sync
+            def check_rename():
+                return (not downstream_client.has_collection(old_name) and
+                        downstream_client.has_collection(new_name))
+
+            sync_success = self.wait_for_sync(check_rename, sync_timeout, f"rename collection {old_name} to {new_name}")
+            assert sync_success, f"Collection rename from {old_name} to {new_name} failed to sync to downstream"
+
+            # Log test success
+            duration = time.time() - start_time
+            self.log_test_end("test_rename_collection", True, duration)
+
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(f"[ERROR] Test failed with error: {e}")
+            self.log_test_end("test_rename_collection", False, duration)
+            raise

@@ -114,7 +114,7 @@ class TestCDCSyncResourceGroup(TestCDCSyncBase):
         upstream_client.create_resource_group(target_rg)
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=self.create_default_schema(upstream_client)
         )
 
         # Wait for sync

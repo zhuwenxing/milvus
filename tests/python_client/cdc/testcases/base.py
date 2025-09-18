@@ -85,10 +85,36 @@ class TestCDCSyncBase:
         return schema
 
     @staticmethod
+    def create_manual_id_schema(client):
+        """Create collection schema with manual ID for upsert operations."""
+        from pymilvus import DataType
+
+        # Create schema using MilvusClient API with manual ID
+        schema = client.create_schema(enable_dynamic_field=True)
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=False)
+        schema.add_field("vector", DataType.FLOAT_VECTOR, dim=128)
+
+        return schema
+
+    @staticmethod
     def generate_test_data(count: int = 100) -> List[Dict[str, Any]]:
         """Generate test data for insert operations."""
         return [
             {
+                "vector": [random.random() for _ in range(128)],
+                "text": f"test_text_{i}",
+                "number": i,
+                "metadata": {"type": "test", "value": i}
+            }
+            for i in range(count)
+        ]
+
+    @staticmethod
+    def generate_test_data_with_id(count: int = 100, start_id: int = 0) -> List[Dict[str, Any]]:
+        """Generate test data with manual IDs for upsert operations."""
+        return [
+            {
+                "id": start_id + i,
                 "vector": [random.random() for _ in range(128)],
                 "text": f"test_text_{i}",
                 "number": i,
