@@ -3,7 +3,7 @@ CDC sync tests for database operations.
 """
 
 import time
-from base import TestCDCSyncBase, logger
+from .base import TestCDCSyncBase, logger
 
 
 class TestCDCSyncDatabase(TestCDCSyncBase):

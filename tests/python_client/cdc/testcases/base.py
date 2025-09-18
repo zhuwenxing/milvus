@@ -73,20 +73,22 @@ class TestCDCSyncBase:
         return False
 
     @staticmethod
-    def create_default_schema() -> Dict[str, Any]:
-        """Create default collection schema for testing."""
-        return {
-            "dimension": 128,
-            "auto_id": True,
-            "enable_dynamic_field": True
-        }
+    def create_default_schema(client):
+        """Create default collection schema for testing using MilvusClient API."""
+        from pymilvus import DataType
+
+        # Create schema using MilvusClient API like in the example
+        schema = client.create_schema(enable_dynamic_field=True)
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+        schema.add_field("vector", DataType.FLOAT_VECTOR, dim=128)
+
+        return schema
 
     @staticmethod
     def generate_test_data(count: int = 100) -> List[Dict[str, Any]]:
         """Generate test data for insert operations."""
         return [
             {
-                "id": i,
                 "vector": [random.random() for _ in range(128)],
                 "text": f"test_text_{i}",
                 "number": i,

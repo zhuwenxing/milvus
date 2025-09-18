@@ -3,7 +3,7 @@ CDC sync tests for collection management operations.
 """
 
 import time
-from base import TestCDCSyncBase, logger
+from .base import TestCDCSyncBase, logger
 
 
 class TestCDCSyncCollectionManagement(TestCDCSyncBase):
@@ -35,10 +35,12 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         # Initial cleanup
         self.cleanup_collection(upstream_client, collection_name)
 
-        # Create collection and index
+        # Create collection with proper schema
+        schema = self.create_default_schema(upstream_client)
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=schema,
+            consistency_level="Strong"
         )
 
         # Create index (required for loading)
@@ -86,10 +88,12 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         # Initial cleanup
         self.cleanup_collection(upstream_client, collection_name)
 
-        # Create collection, index, and load
+        # Create collection with proper schema
+        schema = self.create_default_schema(upstream_client)
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=schema,
+            consistency_level="Strong"
         )
 
         index_params = upstream_client.prepare_index_params()
@@ -147,10 +151,12 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         # Initial cleanup
         self.cleanup_collection(upstream_client, collection_name)
 
-        # Create collection
+        # Create collection with proper schema
+        schema = self.create_default_schema(upstream_client)
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=schema,
+            consistency_level="Strong"
         )
 
         # Wait for creation to sync
@@ -160,7 +166,8 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
 
         # Insert data (without immediate flush)
         test_data = self.generate_test_data(100)
-        upstream_client.insert(collection_name, test_data)
+        insert_result = upstream_client.insert(collection_name, test_data)
+        logger.info(f"Insert result: {insert_result}")
 
         # Verify data is not visible before flush
         stats_before = upstream_client.get_collection_stats(collection_name)
@@ -169,10 +176,26 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         # Flush collection
         upstream_client.flush(collection_name)
 
-        # Verify data is visible after flush
+        # Wait for flush data to be visible with timeout
+        expected_count = insert_result.get('insert_count', 100) if insert_result else 100
+
+        def check_flush_stats():
+            try:
+                stats = upstream_client.get_collection_stats(collection_name)
+                row_count = stats.get('row_count', 0)
+                logger.info(f"Current row count: {row_count}, expected: {expected_count}")
+                return row_count >= expected_count
+            except Exception as e:
+                logger.warning(f"Error checking stats: {e}")
+                return False
+
+        # Use timeout for waiting flush stats to update
+        timeout = 30  # 30 seconds timeout
+        assert self.wait_for_sync(check_flush_stats, timeout, f"flush data visible in stats (expected: {expected_count})")
+
+        # Get final stats after flush
         stats_after = upstream_client.get_collection_stats(collection_name)
         logger.info(f"Stats after flush: {stats_after}")
-        assert stats_after.get('row_count', 0) >= 100
 
         # Wait for flush to sync downstream
         def check_flush():
@@ -195,11 +218,25 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         # Initial cleanup
         self.cleanup_collection(upstream_client, collection_name)
 
-        # Create collection and add data
+        # Create collection with proper schema
+        schema = self.create_default_schema(upstream_client)
         upstream_client.create_collection(
             collection_name=collection_name,
-            **self.create_default_schema()
+            schema=schema,
+            consistency_level="Strong"
         )
+
+        # Create index (required for loading)
+        index_params = upstream_client.prepare_index_params()
+        index_params.add_index(
+            field_name="vector",
+            index_type="AUTOINDEX",
+            metric_type="L2"
+        )
+        upstream_client.create_index(collection_name, index_params)
+
+        # Load collection (required for delete operations)
+        upstream_client.load_collection(collection_name)
 
         # Insert and delete some data to create segments that need compaction
         test_data = self.generate_test_data(200)
@@ -215,9 +252,8 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
                 return False
         assert self.wait_for_sync(check_setup, sync_timeout, f"setup collection {collection_name}")
 
-        # Delete some data
-        delete_ids = list(range(50))  # Delete first 50 records
-        upstream_client.delete(collection_name, filter=f"id in {delete_ids}")
+        # Delete some data based on a field that exists in our test data
+        upstream_client.delete(collection_name, filter="number < 50")  # Delete records where number < 50
         upstream_client.flush(collection_name)
 
         # Compact collection
