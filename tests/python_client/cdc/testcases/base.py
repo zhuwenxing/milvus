@@ -22,12 +22,30 @@ class TestCDCSyncBase:
     """Base class for CDC sync tests with common utilities."""
 
     @staticmethod
-    def gen_unique_name(prefix: str = "", length: int = 8) -> str:
+    def gen_unique_name(prefix: str = "", length: int = 8, max_length: int = None) -> str:
         """Generate a unique string with prefix and timestamp."""
         chars = string.ascii_letters + string.digits
         random_str = ''.join(random.choice(chars) for _ in range(length))
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # milliseconds
-        return f"{prefix}_{timestamp}_{random_str}"
+
+        name = f"{prefix}_{timestamp}_{random_str}"
+
+        # If max_length is specified and name exceeds it, truncate intelligently
+        if max_length and len(name) > max_length:
+            # Keep the random suffix for uniqueness, truncate prefix and timestamp
+            suffix_len = length + 1  # +1 for underscore
+            available_len = max_length - suffix_len
+
+            if available_len > 0:
+                # Use shorter timestamp format for space
+                short_timestamp = datetime.now().strftime('%m%d_%H%M%S')  # 11 chars
+                truncated_prefix = prefix[:available_len - len(short_timestamp) - 1] if len(prefix) > 0 else ""
+                name = f"{truncated_prefix}_{short_timestamp}_{random_str}" if truncated_prefix else f"{short_timestamp}_{random_str}"
+            else:
+                # Fallback: just use random string
+                name = random_str
+
+        return name
 
     @staticmethod
     def wait_for_sync(check_func: Callable[[], bool], timeout: int = 120,
@@ -166,6 +184,32 @@ class TestCDCSyncBase:
             roles = client.list_roles()
             if role_name in roles:
                 logger.info(f"[CLEANUP] Cleaning up role: {role_name}")
+
+                # First, revoke all privileges from the role
+                try:
+                    role_privileges = client.describe_role(role_name)
+                    if isinstance(role_privileges, dict) and 'privileges' in role_privileges:
+                        privileges_list = role_privileges['privileges']
+                    elif isinstance(role_privileges, list):
+                        privileges_list = role_privileges
+                    else:
+                        privileges_list = []
+
+                    for privilege_info in privileges_list:
+                        try:
+                            client.revoke_privilege(
+                                role_name=role_name,
+                                object_type=privilege_info.get('object_type', 'Collection'),
+                                privilege=privilege_info.get('privilege'),
+                                object_name=privilege_info.get('object_name', '*')
+                            )
+                            logger.debug(f"[CLEANUP] Revoked privilege {privilege_info.get('privilege')} from role {role_name}")
+                        except Exception as revoke_e:
+                            logger.debug(f"[CLEANUP] Failed to revoke privilege {privilege_info.get('privilege')}: {revoke_e}")
+                except Exception as describe_e:
+                    logger.debug(f"[CLEANUP] Failed to describe role privileges: {describe_e}")
+
+                # Then drop the role
                 client.drop_role(role_name)
                 logger.info(f"[SUCCESS] Role {role_name} cleaned up successfully")
             else:
