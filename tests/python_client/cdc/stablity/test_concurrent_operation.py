@@ -10,11 +10,9 @@ from chaos.checker import (InsertChecker,
                            Op,
                            ResultAnalyzer
                            )
-from utils.util_k8s import wait_pods_ready, get_milvus_instance_name
 from utils.util_log import test_log as log
 from chaos import chaos_commons as cc
 from common import common_func as cf
-from common.milvus_sys import MilvusSys
 from common.common_type import CaseLabel
 from chaos import constants
 

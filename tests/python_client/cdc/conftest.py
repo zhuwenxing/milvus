@@ -61,10 +61,42 @@ def sync_timeout(request):
     """Get sync timeout from command line."""
     return int(request.config.getoption("--sync-timeout"))
 
+
+@pytest.fixture(scope="session")
+def upstream_uri(request):
+    """Get upstream uri from command line."""
+    return request.config.getoption("--upstream-uri")
+
+@pytest.fixture(scope="session")
+def upstream_token(request):
+    """Get upstream token from command line."""
+    return request.config.getoption("--upstream-token")
+
 @pytest.fixture(scope="session")
 def downstream_uri(request):
     """Get downstream uri from command line."""
     return request.config.getoption("--downstream-uri")
+
+@pytest.fixture(scope="session")
+def downstream_token(request):
+    """Get downstream token from command line."""
+    return request.config.getoption("--downstream-token")
+
+@pytest.fixture(scope="session")
+def source_cluster_id(request):
+    """Get source cluster id from command line."""
+    return request.config.getoption("--source-cluster-id")
+
+@pytest.fixture(scope="session")
+def target_cluster_id(request):
+    """Get target cluster id from command line."""
+    return request.config.getoption("--target-cluster-id")
+
+@pytest.fixture(scope="session")
+def pchannel_num(request):
+    """Get pchannel num from command line."""
+    return int(request.config.getoption("--pchannel-num"))
+
 
 @pytest.fixture(scope="session", autouse=True)
 def cdc_topology_setup(request, upstream_client, downstream_client):
