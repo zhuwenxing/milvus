@@ -97,21 +97,17 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='connection info')
-    parser.add_argument('--upstream_uri', type=str, default='10.100.36.179', help='milvus host')
-    parser.add_argument('--downstream_uri', type=str, default='10.100.36.178', help='milvus host')
-    parser.add_argument('--upstream_token', type=str, default='', help='milvus token')
-    parser.add_argument('--downstream_token', type=str, default='', help='milvus token')
+    parser.add_argument('--upstream_uri', type=str, default='http://10.100.36.179:19530', help='milvus uri')
+    parser.add_argument('--downstream_uri', type=str, default='http://10.100.36.178:19530', help='milvus uri')
+    parser.add_argument('--upstream_token', type=str, default='root:Milvus', help='milvus token')
+    parser.add_argument('--downstream_token', type=str, default='root:Milvus', help='milvus token')
     args = parser.parse_args()
     diff_cnt = 0
     diff = None
     t0 = time.time()
     while diff_cnt < 10:
-        upstream = get_cluster_info(args.upstream_uri, args.upstream_token,
-                                    )
-        downstream = get_cluster_info(args.downstream_uri, args.downstream_token,
-                                      )
-        # logger.info(f"upstream info: {json.dumps(upstream, indent=2)}")
-        # logger.info(f"downstream info: {json.dumps(downstream, indent=2)}")
+        upstream = get_cluster_info(args.upstream_uri, args.upstream_token)
+        downstream = get_cluster_info(args.downstream_uri, args.downstream_token)
         diff = DeepDiff(upstream, downstream)
         diff = convert_deepdiff(diff)
         logger.info(f"diff: {diff}")
