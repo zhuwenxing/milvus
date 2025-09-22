@@ -8,7 +8,7 @@ import string
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Callable
-from pymilvus import MilvusClient
+from pymilvus import MilvusClient, DataType,FunctionType, Function
 
 # Configure logging
 logging.basicConfig(
@@ -103,6 +103,162 @@ class TestCDCSyncBase:
         return schema
 
     @staticmethod
+    def create_comprehensive_schema(client):
+        """Create schema with comprehensive data types for testing (max 4 vector fields)."""
+        from pymilvus import DataType
+
+        schema = client.create_schema(enable_dynamic_field=True)
+
+        # Primary key
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+
+        # Vector fields (limited to 4 total)
+        schema.add_field("float_vector", DataType.FLOAT_VECTOR, dim=128)
+        schema.add_field("float16_vector", DataType.FLOAT16_VECTOR, dim=64)
+        schema.add_field("binary_vector", DataType.BINARY_VECTOR, dim=128)
+        schema.add_field("sparse_vector", DataType.SPARSE_FLOAT_VECTOR)
+
+        # Scalar fields
+        schema.add_field("bool_field", DataType.BOOL)
+        schema.add_field("int8_field", DataType.INT8)
+        schema.add_field("int16_field", DataType.INT16)
+        schema.add_field("int32_field", DataType.INT32)
+        schema.add_field("int64_field", DataType.INT64)
+        schema.add_field("float_field", DataType.FLOAT)
+        schema.add_field("double_field", DataType.DOUBLE)
+        schema.add_field("varchar_field", DataType.VARCHAR, max_length=1000)
+
+        # Array fields
+        schema.add_field("bool_array", DataType.ARRAY, element_type=DataType.BOOL, max_capacity=100)
+        schema.add_field("int32_array", DataType.ARRAY, element_type=DataType.INT32, max_capacity=100)
+        schema.add_field("int64_array", DataType.ARRAY, element_type=DataType.INT64, max_capacity=100)
+        schema.add_field("float_array", DataType.ARRAY, element_type=DataType.FLOAT, max_capacity=100)
+        schema.add_field("double_array", DataType.ARRAY, element_type=DataType.DOUBLE, max_capacity=100)
+        schema.add_field("varchar_array", DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=100, max_length=100)
+
+        # JSON field
+        schema.add_field("json_field", DataType.JSON)
+
+        return schema
+
+    @staticmethod
+    def create_comprehensive_manual_id_schema(client):
+        """Create comprehensive schema with manual ID for upsert operations (max 4 vector fields)."""
+        from pymilvus import DataType
+
+        schema = client.create_schema(enable_dynamic_field=True)
+
+        # Primary key - manual ID
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=False)
+
+        # Vector fields (limited to 4 total)
+        schema.add_field("float_vector", DataType.FLOAT_VECTOR, dim=128)
+        schema.add_field("float16_vector", DataType.FLOAT16_VECTOR, dim=64)
+        schema.add_field("binary_vector", DataType.BINARY_VECTOR, dim=128)
+        schema.add_field("sparse_vector", DataType.SPARSE_FLOAT_VECTOR)
+
+        # Scalar fields
+        schema.add_field("bool_field", DataType.BOOL)
+        schema.add_field("int8_field", DataType.INT8)
+        schema.add_field("int16_field", DataType.INT16)
+        schema.add_field("int32_field", DataType.INT32)
+        schema.add_field("int64_field", DataType.INT64)
+        schema.add_field("float_field", DataType.FLOAT)
+        schema.add_field("double_field", DataType.DOUBLE)
+        schema.add_field("varchar_field", DataType.VARCHAR, max_length=1000)
+
+        # Array fields
+        schema.add_field("bool_array", DataType.ARRAY, element_type=DataType.BOOL, max_capacity=100)
+        schema.add_field("int32_array", DataType.ARRAY, element_type=DataType.INT32, max_capacity=100)
+        schema.add_field("int64_array", DataType.ARRAY, element_type=DataType.INT64, max_capacity=100)
+        schema.add_field("float_array", DataType.ARRAY, element_type=DataType.FLOAT, max_capacity=100)
+        schema.add_field("double_array", DataType.ARRAY, element_type=DataType.DOUBLE, max_capacity=100)
+        schema.add_field("varchar_array", DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=100, max_length=100)
+
+        # JSON field
+        schema.add_field("json_field", DataType.JSON)
+
+        return schema
+
+    @staticmethod
+    def create_comprehensive_schema_alt(client):
+        """Create alternative comprehensive schema with BFLOAT16_VECTOR and INT8_VECTOR (max 4 vector fields)."""
+        from pymilvus import DataType
+
+        schema = client.create_schema(enable_dynamic_field=True)
+
+        # Primary key
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+
+        # Vector fields (alternative set - limited to 4 total)
+        schema.add_field("float_vector", DataType.FLOAT_VECTOR, dim=128)
+        schema.add_field("bfloat16_vector", DataType.BFLOAT16_VECTOR, dim=64)
+        schema.add_field("int8_vector", DataType.INT8_VECTOR, dim=128)
+        schema.add_field("sparse_vector", DataType.SPARSE_FLOAT_VECTOR)
+
+        # Scalar fields
+        schema.add_field("bool_field", DataType.BOOL)
+        schema.add_field("int8_field", DataType.INT8)
+        schema.add_field("int16_field", DataType.INT16)
+        schema.add_field("int32_field", DataType.INT32)
+        schema.add_field("int64_field", DataType.INT64)
+        schema.add_field("float_field", DataType.FLOAT)
+        schema.add_field("double_field", DataType.DOUBLE)
+        schema.add_field("varchar_field", DataType.VARCHAR, max_length=1000)
+
+        # Array fields
+        schema.add_field("bool_array", DataType.ARRAY, element_type=DataType.BOOL, max_capacity=100)
+        schema.add_field("int32_array", DataType.ARRAY, element_type=DataType.INT32, max_capacity=100)
+        schema.add_field("int64_array", DataType.ARRAY, element_type=DataType.INT64, max_capacity=100)
+        schema.add_field("float_array", DataType.ARRAY, element_type=DataType.FLOAT, max_capacity=100)
+        schema.add_field("double_array", DataType.ARRAY, element_type=DataType.DOUBLE, max_capacity=100)
+        schema.add_field("varchar_array", DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=100, max_length=100)
+
+        # JSON field
+        schema.add_field("json_field", DataType.JSON)
+
+        return schema
+
+    @staticmethod
+    def create_comprehensive_manual_id_schema_alt(client):
+        """Create alternative comprehensive schema with manual ID, BFLOAT16_VECTOR and INT8_VECTOR (max 4 vector fields)."""
+        from pymilvus import DataType
+
+        schema = client.create_schema(enable_dynamic_field=True)
+
+        # Primary key - manual ID
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=False)
+
+        # Vector fields (alternative set - limited to 4 total)
+        schema.add_field("float_vector", DataType.FLOAT_VECTOR, dim=128)
+        schema.add_field("bfloat16_vector", DataType.BFLOAT16_VECTOR, dim=64)
+        schema.add_field("int8_vector", DataType.INT8_VECTOR, dim=128)
+        schema.add_field("sparse_vector", DataType.SPARSE_FLOAT_VECTOR)
+
+        # Scalar fields
+        schema.add_field("bool_field", DataType.BOOL)
+        schema.add_field("int8_field", DataType.INT8)
+        schema.add_field("int16_field", DataType.INT16)
+        schema.add_field("int32_field", DataType.INT32)
+        schema.add_field("int64_field", DataType.INT64)
+        schema.add_field("float_field", DataType.FLOAT)
+        schema.add_field("double_field", DataType.DOUBLE)
+        schema.add_field("varchar_field", DataType.VARCHAR, max_length=1000)
+
+        # Array fields
+        schema.add_field("bool_array", DataType.ARRAY, element_type=DataType.BOOL, max_capacity=100)
+        schema.add_field("int32_array", DataType.ARRAY, element_type=DataType.INT32, max_capacity=100)
+        schema.add_field("int64_array", DataType.ARRAY, element_type=DataType.INT64, max_capacity=100)
+        schema.add_field("float_array", DataType.ARRAY, element_type=DataType.FLOAT, max_capacity=100)
+        schema.add_field("double_array", DataType.ARRAY, element_type=DataType.DOUBLE, max_capacity=100)
+        schema.add_field("varchar_array", DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=100, max_length=100)
+
+        # JSON field
+        schema.add_field("json_field", DataType.JSON)
+
+        return schema
+
+    @staticmethod
     def create_manual_id_schema(client):
         """Create collection schema with manual ID for upsert operations."""
         from pymilvus import DataType
@@ -140,6 +296,301 @@ class TestCDCSyncBase:
             }
             for i in range(count)
         ]
+
+    @staticmethod
+    def generate_comprehensive_test_data(count: int = 100) -> List[Dict[str, Any]]:
+        """Generate comprehensive test data with all data types using standard vector generation."""
+        import numpy as np
+        from pymilvus import DataType
+
+        # Generate vectors using standard method
+        float_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.FLOAT_VECTOR)
+        float16_vectors = TestCDCSyncBase._gen_vectors(count, 64, DataType.FLOAT16_VECTOR)
+        binary_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.BINARY_VECTOR)
+        sparse_vectors = TestCDCSyncBase._gen_vectors(count, 1000, DataType.SPARSE_FLOAT_VECTOR)
+
+        data = []
+        for i in range(count):
+            record = {
+                # Vector fields (limited to 4 total)
+                "float_vector": float_vectors[i],
+                "float16_vector": float16_vectors[i],
+                "binary_vector": binary_vectors[i],
+                "sparse_vector": sparse_vectors[i],
+
+                # Scalar fields
+                "bool_field": random.choice([True, False]),
+                "int8_field": random.randint(-128, 127),
+                "int16_field": random.randint(-32768, 32767),
+                "int32_field": random.randint(-2147483648, 2147483647),
+                "int64_field": random.randint(-9223372036854775808, 9223372036854775807),
+                "float_field": random.uniform(-1000.0, 1000.0),
+                "double_field": random.uniform(-1000.0, 1000.0),
+                "varchar_field": f"test_varchar_{i}_{random.randint(1000, 9999)}",
+
+                # Array fields
+                "bool_array": [random.choice([True, False]) for _ in range(random.randint(1, 10))],
+                "int32_array": [random.randint(-100, 100) for _ in range(random.randint(1, 10))],
+                "int64_array": [random.randint(-1000, 1000) for _ in range(random.randint(1, 10))],
+                "float_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "double_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "varchar_array": [f"array_str_{j}" for j in range(random.randint(1, 5))],
+
+                # JSON field
+                "json_field": {
+                    "name": f"item_{i}",
+                    "value": random.randint(1, 1000),
+                    "tags": [f"tag_{j}" for j in range(random.randint(1, 3))],
+                    "metadata": {
+                        "created": f"2024-01-{random.randint(1, 28):02d}",
+                        "score": random.uniform(0.0, 100.0)
+                    }
+                }
+            }
+            data.append(record)
+
+        return data
+
+    @staticmethod
+    def generate_comprehensive_test_data_alt(count: int = 100) -> List[Dict[str, Any]]:
+        """Generate comprehensive test data with alternative vector types (BFLOAT16 + INT8)."""
+        from pymilvus import DataType
+
+        # Generate vectors using standard method - alternative set
+        float_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.FLOAT_VECTOR)
+        bfloat16_vectors = TestCDCSyncBase._gen_vectors(count, 64, DataType.BFLOAT16_VECTOR)
+        int8_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.INT8_VECTOR)
+        sparse_vectors = TestCDCSyncBase._gen_vectors(count, 1000, DataType.SPARSE_FLOAT_VECTOR)
+
+        data = []
+        for i in range(count):
+            record = {
+                # Vector fields (alternative set - limited to 4 total)
+                "float_vector": float_vectors[i],
+                "bfloat16_vector": bfloat16_vectors[i],
+                "int8_vector": int8_vectors[i],
+                "sparse_vector": sparse_vectors[i],
+
+                # Scalar fields
+                "bool_field": random.choice([True, False]),
+                "int8_field": random.randint(-128, 127),
+                "int16_field": random.randint(-32768, 32767),
+                "int32_field": random.randint(-2147483648, 2147483647),
+                "int64_field": random.randint(-9223372036854775808, 9223372036854775807),
+                "float_field": random.uniform(-1000.0, 1000.0),
+                "double_field": random.uniform(-1000.0, 1000.0),
+                "varchar_field": f"test_varchar_{i}_{random.randint(1000, 9999)}",
+
+                # Array fields
+                "bool_array": [random.choice([True, False]) for _ in range(random.randint(1, 10))],
+                "int32_array": [random.randint(-100, 100) for _ in range(random.randint(1, 10))],
+                "int64_array": [random.randint(-1000, 1000) for _ in range(random.randint(1, 10))],
+                "float_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "double_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "varchar_array": [f"array_str_{j}" for j in range(random.randint(1, 5))],
+
+                # JSON field
+                "json_field": {
+                    "name": f"item_{i}",
+                    "value": random.randint(1, 1000),
+                    "tags": [f"tag_{j}" for j in range(random.randint(1, 3))],
+                    "metadata": {
+                        "created": f"2024-01-{random.randint(1, 28):02d}",
+                        "score": random.uniform(0.0, 100.0)
+                    }
+                }
+            }
+            data.append(record)
+
+        return data
+
+    @staticmethod
+    def generate_comprehensive_test_data_alt_with_id(count: int = 100, start_id: int = 0) -> List[Dict[str, Any]]:
+        """Generate comprehensive test data with manual IDs and alternative vector types (BFLOAT16 + INT8)."""
+        from pymilvus import DataType
+
+        # Generate vectors using standard method - alternative set
+        float_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.FLOAT_VECTOR)
+        bfloat16_vectors = TestCDCSyncBase._gen_vectors(count, 64, DataType.BFLOAT16_VECTOR)
+        int8_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.INT8_VECTOR)
+        sparse_vectors = TestCDCSyncBase._gen_vectors(count, 1000, DataType.SPARSE_FLOAT_VECTOR)
+
+        data = []
+        for i in range(count):
+            record = {
+                "id": start_id + i,
+
+                # Vector fields (alternative set - limited to 4 total)
+                "float_vector": float_vectors[i],
+                "bfloat16_vector": bfloat16_vectors[i],
+                "int8_vector": int8_vectors[i],
+                "sparse_vector": sparse_vectors[i],
+
+                # Scalar fields
+                "bool_field": random.choice([True, False]),
+                "int8_field": random.randint(-128, 127),
+                "int16_field": random.randint(-32768, 32767),
+                "int32_field": random.randint(-2147483648, 2147483647),
+                "int64_field": random.randint(-9223372036854775808, 9223372036854775807),
+                "float_field": random.uniform(-1000.0, 1000.0),
+                "double_field": random.uniform(-1000.0, 1000.0),
+                "varchar_field": f"test_varchar_{i}_{random.randint(1000, 9999)}",
+
+                # Array fields
+                "bool_array": [random.choice([True, False]) for _ in range(random.randint(1, 10))],
+                "int32_array": [random.randint(-100, 100) for _ in range(random.randint(1, 10))],
+                "int64_array": [random.randint(-1000, 1000) for _ in range(random.randint(1, 10))],
+                "float_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "double_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "varchar_array": [f"array_str_{j}" for j in range(random.randint(1, 5))],
+
+                # JSON field
+                "json_field": {
+                    "name": f"item_{i}",
+                    "value": random.randint(1, 1000),
+                    "tags": [f"tag_{j}" for j in range(random.randint(1, 3))],
+                    "metadata": {
+                        "created": f"2024-01-{random.randint(1, 28):02d}",
+                        "score": random.uniform(0.0, 100.0)
+                    }
+                }
+            }
+            data.append(record)
+
+        return data
+
+    @staticmethod
+    def _gen_vectors(nb, dim, vector_data_type):
+        """Generate vectors using standard Milvus testing methods."""
+        import numpy as np
+        from pymilvus import DataType
+
+        vectors = []
+        if vector_data_type == DataType.FLOAT_VECTOR:
+            vectors = [[random.uniform(-1, 1) for _ in range(dim)] for _ in range(nb)]
+        elif vector_data_type == DataType.FLOAT16_VECTOR:
+            # Generate float16 vectors like common_func.py
+            for _ in range(nb):
+                raw_vector = [random.random() for _ in range(dim)]
+                fp16_vector = np.array(raw_vector, dtype=np.float16)
+                vectors.append(fp16_vector)
+        elif vector_data_type == DataType.BFLOAT16_VECTOR:
+            # Generate bfloat16 vectors like common_func.py
+            from ml_dtypes import bfloat16
+            for _ in range(nb):
+                raw_vector = [random.random() for _ in range(dim)]
+                bf16_vector = np.array(raw_vector, dtype=bfloat16)
+                vectors.append(bf16_vector)
+        elif vector_data_type == DataType.INT8_VECTOR:
+            # Generate int8 vectors like common_func.py
+            for _ in range(nb):
+                raw_vector = [random.randint(-128, 127) for _ in range(dim)]
+                int8_vector = np.array(raw_vector, dtype=np.int8)
+                vectors.append(int8_vector)
+        elif vector_data_type == DataType.BINARY_VECTOR:
+            # Generate binary vectors (dim bits = dim/8 bytes)
+            bytes_per_vector = dim // 8
+            for _ in range(nb):
+                binary_vec = np.random.randint(0, 256, size=bytes_per_vector, dtype=np.uint8).tobytes()
+                vectors.append(binary_vec)
+        elif vector_data_type == DataType.SPARSE_FLOAT_VECTOR:
+            # Generate sparse vectors
+            for _ in range(nb):
+                sparse_indices = random.sample(range(dim), random.randint(5, min(20, dim)))
+                sparse_values = [random.random() for _ in sparse_indices]
+                sparse_vector = {idx: val for idx, val in zip(sparse_indices, sparse_values)}
+                vectors.append(sparse_vector)
+
+        return vectors
+
+    @staticmethod
+    def generate_comprehensive_test_data_with_id(count: int = 100, start_id: int = 0) -> List[Dict[str, Any]]:
+        """Generate comprehensive test data with manual IDs for upsert operations using standard vector generation."""
+        from pymilvus import DataType
+
+        # Generate vectors using standard method
+        float_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.FLOAT_VECTOR)
+        float16_vectors = TestCDCSyncBase._gen_vectors(count, 64, DataType.FLOAT16_VECTOR)
+        binary_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.BINARY_VECTOR)
+        sparse_vectors = TestCDCSyncBase._gen_vectors(count, 1000, DataType.SPARSE_FLOAT_VECTOR)
+
+        data = []
+        for i in range(count):
+            record = {
+                "id": start_id + i,
+
+                # Vector fields (limited to 4 total)
+                "float_vector": float_vectors[i],
+                "float16_vector": float16_vectors[i],
+                "binary_vector": binary_vectors[i],
+                "sparse_vector": sparse_vectors[i],
+
+                # Scalar fields
+                "bool_field": random.choice([True, False]),
+                "int8_field": random.randint(-128, 127),
+                "int16_field": random.randint(-32768, 32767),
+                "int32_field": random.randint(-2147483648, 2147483647),
+                "int64_field": random.randint(-9223372036854775808, 9223372036854775807),
+                "float_field": random.uniform(-1000.0, 1000.0),
+                "double_field": random.uniform(-1000.0, 1000.0),
+                "varchar_field": f"test_varchar_{i}_{random.randint(1000, 9999)}",
+
+                # Array fields
+                "bool_array": [random.choice([True, False]) for _ in range(random.randint(1, 10))],
+                "int32_array": [random.randint(-100, 100) for _ in range(random.randint(1, 10))],
+                "int64_array": [random.randint(-1000, 1000) for _ in range(random.randint(1, 10))],
+                "float_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "double_array": [random.uniform(-100.0, 100.0) for _ in range(random.randint(1, 10))],
+                "varchar_array": [f"array_str_{j}" for j in range(random.randint(1, 5))],
+
+                # JSON field
+                "json_field": {
+                    "name": f"item_{i}",
+                    "value": random.randint(1, 1000),
+                    "tags": [f"tag_{j}" for j in range(random.randint(1, 3))],
+                    "metadata": {
+                        "created": f"2024-01-{random.randint(1, 28):02d}",
+                        "score": random.uniform(0.0, 100.0)
+                    }
+                }
+            }
+            data.append(record)
+
+        return data
+
+    @staticmethod
+    def generate_bfloat16_test_data(count: int = 100) -> List[Dict[str, Any]]:
+        """Generate test data with BFLOAT16_VECTOR for index testing using standard method."""
+        from pymilvus import DataType
+
+        # Generate bfloat16 vectors using standard method
+        bfloat16_vectors = TestCDCSyncBase._gen_vectors(count, 64, DataType.BFLOAT16_VECTOR)
+
+        data = []
+        for i in range(count):
+            record = {
+                "bfloat16_vector": bfloat16_vectors[i],
+            }
+            data.append(record)
+
+        return data
+
+    @staticmethod
+    def generate_int8_test_data(count: int = 100) -> List[Dict[str, Any]]:
+        """Generate test data with INT8_VECTOR for index testing using standard method."""
+        from pymilvus import DataType
+
+        # Generate int8 vectors using standard method
+        int8_vectors = TestCDCSyncBase._gen_vectors(count, 128, DataType.INT8_VECTOR)
+
+        data = []
+        for i in range(count):
+            record = {
+                "int8_vector": int8_vectors[i],
+            }
+            data.append(record)
+
+        return data
 
     def cleanup_database(self, client: MilvusClient, db_name: str):
         """Clean up database if exists."""

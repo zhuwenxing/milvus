@@ -270,3 +270,117 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
                 return False
 
         assert self.wait_for_sync(check_compact, sync_timeout, f"compact collection {collection_name}")
+
+    def test_load_collection_with_load_fields(self, upstream_client, downstream_client, sync_timeout):
+        """Test LOAD_COLLECTION operation with load_fields parameter sync."""
+        # Store upstream client for teardown
+        self._upstream_client = upstream_client
+
+        collection_name = self.gen_unique_name("test_col_load_fields")
+        self.resources_to_cleanup.append(('collection', collection_name))
+
+        # Initial cleanup
+        self.cleanup_collection(upstream_client, collection_name)
+
+        # Create collection with comprehensive schema (has multiple fields)
+        schema = self.create_comprehensive_schema(upstream_client)
+        upstream_client.create_collection(
+            collection_name=collection_name,
+            schema=schema,
+            consistency_level="Strong"
+        )
+
+        # Create index for float_vector field (required for loading)
+        index_params = upstream_client.prepare_index_params()
+        index_params.add_index(
+            field_name="float_vector",
+            index_type="AUTOINDEX",
+            metric_type="L2"
+        )
+        upstream_client.create_index(collection_name, index_params)
+
+        # Wait for creation to sync
+        def check_create():
+            return downstream_client.has_collection(collection_name)
+        assert self.wait_for_sync(check_create, sync_timeout, f"create collection {collection_name}")
+
+        # Insert some test data
+        test_data = self.generate_comprehensive_test_data(100)
+        upstream_client.insert(collection_name, test_data)
+        upstream_client.flush(collection_name)
+
+        # Load collection with specific fields only (float_vector + id + varchar_field)
+        load_fields = ["float_vector", "id", "varchar_field"]
+        upstream_client.load_collection(collection_name, load_fields=load_fields)
+
+        # Verify upstream load operation succeeded
+        def verify_upstream_load():
+            try:
+                # Try to search to verify collection is loaded
+                query_vector = [[0.1] * 128]
+                upstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=["varchar_field"],
+                    anns_field="float_vector"
+                )
+                return True
+            except Exception as e:
+                logger.warning(f"Upstream load verification failed: {e}")
+                return False
+
+        assert self.wait_for_sync(verify_upstream_load, sync_timeout,
+                                f"verify upstream load with load_fields in {collection_name}")
+
+        # Verify downstream sync - collection should be loaded and searchable
+        def check_downstream_load_sync():
+            try:
+                query_vector = [[0.1] * 128]
+                result = downstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=["varchar_field"],
+                    anns_field="float_vector"
+                )
+                return len(result) > 0 and len(result[0]) >= 0
+            except Exception as e:
+                logger.warning(f"Downstream load sync check failed: {e}")
+                return False
+
+        assert self.wait_for_sync(check_downstream_load_sync, sync_timeout,
+                                f"verify downstream load sync for {collection_name}")
+
+        # Additional verification: test that both loaded and unloaded fields can be output
+        # (since load_fields only affects memory usage, not field accessibility)
+        def verify_all_fields_accessible():
+            try:
+                query_vector = [[0.1] * 128]
+                # Test accessing both loaded and unloaded fields
+                result1 = downstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=["varchar_field"],  # loaded field
+                    anns_field="float_vector"
+                )
+
+                result2 = downstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=["float_field"],  # unloaded field (but should still be accessible)
+                    anns_field="float_vector"
+                )
+
+                return len(result1) > 0 and len(result2) > 0
+            except Exception as e:
+                logger.warning(f"Field accessibility verification failed: {e}")
+                return False
+
+        assert self.wait_for_sync(verify_all_fields_accessible, sync_timeout,
+                                f"verify all fields accessible in {collection_name}")
+
+        logger.info(f"Successfully tested load_collection with load_fields: {load_fields}")
+        logger.info("Verified CDC sync of load operation with load_fields parameter")
