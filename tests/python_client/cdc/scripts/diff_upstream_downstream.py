@@ -97,10 +97,10 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='connection info')
-    parser.add_argument('--upstream_uri', type=str, default='http://10.100.36.179:19530', help='milvus uri')
-    parser.add_argument('--downstream_uri', type=str, default='http://10.100.36.178:19530', help='milvus uri')
-    parser.add_argument('--upstream_token', type=str, default='root:Milvus', help='milvus token')
-    parser.add_argument('--downstream_token', type=str, default='root:Milvus', help='milvus token')
+    parser.add_argument('--upstream-uri', type=str, default='http://10.100.36.179:19530', help='milvus uri')
+    parser.add_argument('--downstream-uri', type=str, default='http://10.100.36.178:19530', help='milvus uri')
+    parser.add_argument('--upstream-token', type=str, default='root:Milvus', help='milvus token')
+    parser.add_argument('--downstream-token', type=str, default='root:Milvus', help='milvus token')
     args = parser.parse_args()
     diff_cnt = 0
     diff = None

@@ -34,6 +34,8 @@ def pytest_addoption(parser):
                      help="Target cluster ID for CDC topology")
     parser.addoption("--pchannel-num", action="store", default="16",
                      help="Number of physical channels for CDC")
+    parser.addoption("--request-duration", action="store", default="30m",
+                     help="Duration for test operations (e.g., 30m, 1h, 60s)")
 
 
 @pytest.fixture(scope="session")
@@ -96,6 +98,12 @@ def target_cluster_id(request):
 def pchannel_num(request):
     """Get pchannel num from command line."""
     return int(request.config.getoption("--pchannel-num"))
+
+
+@pytest.fixture(scope="session")
+def request_duration(request):
+    """Get request duration from command line."""
+    return request.config.getoption("--request-duration")
 
 
 @pytest.fixture(scope="session", autouse=True)
