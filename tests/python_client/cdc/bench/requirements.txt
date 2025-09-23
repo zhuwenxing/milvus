@@ -1,0 +1,4 @@
+locust[milvus]>=2.40.5
+numpy<2.0.0
+pymilvus
+faker
