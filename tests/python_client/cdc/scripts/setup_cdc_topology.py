@@ -1,6 +1,6 @@
 from pymilvus import MilvusClient
 
-def switch_cdc_topology(upstream_uri, downstream_uri, upstream_token, downstream_token, source_cluster_id, target_cluster_id, pchannel_num):
+def setup_cdc_topology(upstream_uri, downstream_uri, upstream_token, downstream_token, source_cluster_id, target_cluster_id, pchannel_num):
     upstream_client = MilvusClient(uri=upstream_uri, token=upstream_token)
     downstream_client = MilvusClient(uri=downstream_uri, token=downstream_token)
     config = {
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     parser.add_argument('--target_cluster_id', type=str, default='cdc-test-target', help='target cluster id')
     parser.add_argument('--pchannel_num', type=int, default=16, help='pchannel num')
     args = parser.parse_args()
-    switch_cdc_topology(args.upstream_uri, 
+    setup_cdc_topology(args.upstream_uri, 
                         args.downstream_uri, 
                         args.upstream_token, 
                         args.downstream_token, 

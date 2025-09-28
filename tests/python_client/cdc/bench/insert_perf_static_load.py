@@ -2,6 +2,7 @@ from faker import Faker
 from locust import events, task, tag, between, LoadTestShape
 from locust.contrib.milvus import MilvusUser
 from pymilvus import CollectionSchema, DataType, FieldSchema
+from pymilvus import MilvusClient
 import uuid
 from typing import List, Dict, Any
 import numpy as np
@@ -31,6 +32,12 @@ class MilvusInsertTestUser(MilvusUser):
             collection_name="insert_test_collection",
             schema=schema,
         )
+
+        self.milvus_client = MilvusClient(uri=environment.parsed_options.milvus_uri, token=environment.parsed_options.milvus_token)
+        try:
+            self.milvus_client.release_collection(self.collection_name)
+        except Exception as e:
+            print(f"DEBUG: release collection {self.collection_name} failed: {e}")
 
 
     def _random_embedding(self):
