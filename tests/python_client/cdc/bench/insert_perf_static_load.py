@@ -34,10 +34,16 @@ class MilvusInsertTestUser(MilvusUser):
         )
 
         self.milvus_client = MilvusClient(uri=environment.parsed_options.milvus_uri, token=environment.parsed_options.milvus_token)
+        res = self.milvus_client.get_load_state("insert_test_collection")
+        print(f"DEBUG: get collection stats insert_test_collection: {res}") 
         try:
-            self.milvus_client.release_collection(self.collection_name)
+            self.milvus_client.release_collection("insert_test_collection")
+            res = self.milvus_client.describe_collection("insert_test_collection")
+            print(f"DEBUG: describe collection insert_test_collection: {res}")
+            res = self.milvus_client.get_load_state("insert_test_collection")
+            print(f"DEBUG: get collection stats insert_test_collection: {res}")
         except Exception as e:
-            print(f"DEBUG: release collection {self.collection_name} failed: {e}")
+            print(f"DEBUG: release collection insert_test_collection failed: {e}")
 
 
     def _random_embedding(self):
