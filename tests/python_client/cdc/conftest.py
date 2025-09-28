@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 def pytest_addoption(parser):
     """Add command line options for pytest."""
-    parser.addoption("--upstream-uri", action="store", default="http://10.104.18.113:19530",
+    parser.addoption("--upstream-uri", action="store", default="http://10.104.18.98:19530",
                      help="Upstream Milvus uri")
     parser.addoption("--upstream-token", action="store", default="root:Milvus",
                      help="Upstream Milvus token")
-    parser.addoption("--downstream-uri", action="store", default="http://10.104.18.114:19530",
+    parser.addoption("--downstream-uri", action="store", default="http://10.104.17.33:19530",
                      help="Downstream Milvus uri")
     parser.addoption("--downstream-token", action="store", default="root:Milvus",
                      help="Downstream Milvus token")
