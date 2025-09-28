@@ -3,7 +3,7 @@ CDC sync tests for resource group operations.
 """
 
 import time
-from base import TestCDCSyncBase, logger
+from .base import TestCDCSyncBase, logger
 
 
 class TestCDCSyncResourceGroup(TestCDCSyncBase):

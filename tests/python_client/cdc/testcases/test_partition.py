@@ -198,6 +198,12 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         upstream_client.create_index(collection_name, index_params)
         upstream_client.load_collection(collection_name)
         upstream_client.load_partitions(collection_name, [partition_name])
+        for p_name in [partition_name, None]:
+            data = [
+                {"vector": [0.1] * 128}
+                for _ in range(100)
+            ]
+            upstream_client.insert(collection_name, data, partition_name=p_name)
 
         # Wait for setup to sync
         def check_setup():
@@ -223,19 +229,42 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         load_state = str(upstream_load_state['state'])
         print(f"DEBUG: partition load state in upstream: {load_state}")
 
-        # Wait for release to sync
+        # check partition load state in upstream
         def check_release():
             try:
-                # Check partition load state
-                load_state = downstream_client.get_load_state(
+                query_vector = [[0.1] * 128]
+                res = upstream_client.search(
                     collection_name=collection_name,
-                    partition_name=partition_name
+                    data=query_vector,
+                    limit=1,
+                    partition_names=[partition_name],
+                    output_fields=[]
                 )
-                print(f"DEBUG: partition load state in check_release: {load_state['state']}")
-                return "NotLoad" == str(load_state['state'])
-            except Exception as e:
-                print(f"DEBUG: get_load_state exception in check_release: {e}")
-                return True   # If error, assume partition is released
+                print(f"DEBUG: released partition {partition_name} can still be searched: {res}")
+                print(f"DEBUG: released partition {partition_name} can still be searched")
+                return False
+            except:
+                print(f"DEBUG: released partition {partition_name} cannot be searched")
+                return True
+        assert self.wait_for_sync(check_release, sync_timeout, f"release partition {partition_name}")
+
+
+        # check partition load state in downstream
+        def check_release():
+            try:
+                query_vector = [[0.1] * 128]
+                downstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    partition_names=[partition_name],
+                    output_fields=[]
+                )
+                print(f"DEBUG: released partition {partition_name} can still be searched")
+                return False
+            except:
+                print(f"DEBUG: released partition {partition_name} cannot be searched")
+                return True
 
         assert self.wait_for_sync(check_release, sync_timeout, f"release partition {partition_name}")
 
