@@ -189,11 +189,8 @@ class TestCDCTopologySetup(TestCDCSyncBase):
             ]
         }
 
-        # This should fail
-        try:
+        with pytest.raises(Exception):
             upstream_client.update_replicate_configuration(**invalid_config_1)
-        except Exception as e:
-            print(e)
 
         # Test case 4.2: Circular dependency (A -> B, B -> A)
         invalid_config_2 = {
@@ -228,14 +225,8 @@ class TestCDCTopologySetup(TestCDCSyncBase):
         }
 
         # This may or may not fail depending on implementation, but test it
-        try:
+        with pytest.raises(Exception):
             upstream_client.update_replicate_configuration(**invalid_config_2)
-            downstream_client.update_replicate_configuration(**invalid_config_2)
-            # If it succeeds, it might be intentionally allowed for bidirectional sync
-            time.sleep(3)  # Let it settle
-        except Exception as e:
-            # Expected to fail due to circular dependency
-            print(e)
 
         # Test case 4.3: Invalid connection parameters
         invalid_config_3 = {
@@ -264,10 +255,8 @@ class TestCDCTopologySetup(TestCDCSyncBase):
                 }
             ]
         }
-        try:
+        with pytest.raises(Exception):
             upstream_client.update_replicate_configuration(**invalid_config_3)
-        except Exception as e:
-            print(e)
 
         # Test case 4.4: Empty cluster list but non-empty topology
         invalid_config_4 = {
@@ -279,12 +268,7 @@ class TestCDCTopologySetup(TestCDCSyncBase):
                 }
             ]
         }
-
-        # This should fail
-        try:
-            upstream_client.update_replicate_configuration(**invalid_config_4)
-        except Exception as e:
-            print(e)
+        with pytest.raises(Exception):
             upstream_client.update_replicate_configuration(**invalid_config_4)
 
         # Test case 4.5: Invalid pchannel format
@@ -301,13 +285,11 @@ class TestCDCTopologySetup(TestCDCSyncBase):
             ],
             "cross_cluster_topology": []
         }
-
-        # This might fail depending on validation strictness
-        try:
+        with pytest.raises(Exception):
             upstream_client.update_replicate_configuration(**invalid_config_5)
-        except Exception as e:
-            print(e)
 
+
+    @pytest.mark.order(-1)
     def test_clear_configuration_disconnect(self, upstream_client, downstream_client,
                                             upstream_uri, downstream_uri, upstream_token, downstream_token,
                                             source_cluster_id, target_cluster_id, pchannel_num):

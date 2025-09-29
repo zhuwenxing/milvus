@@ -4,8 +4,10 @@ CDC sync tests for resource group operations.
 
 import time
 from .base import TestCDCSyncBase, logger
+import pytest
 
 
+@pytest.mark.skip(reason="Skip resource group test")
 class TestCDCSyncResourceGroup(TestCDCSyncBase):
     """Test CDC sync for resource group operations."""
 

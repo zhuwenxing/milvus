@@ -2,12 +2,12 @@
 apiVersion: milvus.io/v1beta1
 kind: Milvus
 metadata:
-  name: cdc-test-source-0924-v2
+  name: cdc-test-source-0929
   namespace: chaos-testing
   labels:
     app: milvus
 spec:
-  mode: standalone
+  mode: cluster
   config:
     common:
       security:
@@ -15,20 +15,13 @@ spec:
     log:
       level: debug
   components:
-    image: harbor.milvus.io/milvus/milvus:chyezh-enhance_DDL_CDC_final-e3987bd-20250924
+    version: v2.6.2
+    image: harbor.milvus.io/milvus/milvus:bigsheeper-enhance_DDL_CDC_final-7032594-20250928
     disableMetric: false
-    standalone:
-      resources:
-        requests:
-          cpu: 2
-          memory: 8Gi
-        limits:
-          cpu: 2
-          memory: 8Gi
+    cdc:
       replicas: 1
-      serviceType: LoadBalancer
   dependencies:
-    msgStreamType: pulsar
+    msgStreamType: woodpecker
     storage:
       inCluster:
         deletionPolicy: Delete
@@ -44,29 +37,3 @@ spec:
             podMonitor:
               enabled: true
               namespace: chaos-testing
-    pulsar:
-      inCluster:
-        deletionPolicy: Delete
-        pvcDeletion: true
-        values:
-          components:
-            autorecovery: false
-            functions: false
-            toolset: false
-            pulsar_manager: false
-          monitoring:
-            prometheus: false
-            grafana: false
-            node_exporter: false
-            alert_manager: false
-          proxy:
-            replicaCount: 1
-            resources:
-              requests:
-                cpu: 0.01
-                memory: 256Mi
-            configData:
-              PULSAR_MEM: >
-                -Xms256m -Xmx256m
-              PULSAR_GC: >
-                -XX:MaxDirectMemorySize=256m
