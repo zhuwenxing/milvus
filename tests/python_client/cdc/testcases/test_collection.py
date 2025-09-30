@@ -413,7 +413,7 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         assert self.wait_for_sync(check_create, sync_timeout, f"create collection {collection_name}")
 
         # Insert data (without immediate flush)
-        test_data = self.generate_test_data(100)
+        test_data = self.generate_test_data(5000)
         insert_result = upstream_client.insert(collection_name, test_data)
         logger.info(f"Insert result: {insert_result}")
 
@@ -430,6 +430,7 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         def check_flush_stats():
             try:
                 stats = upstream_client.get_collection_stats(collection_name)
+                print(f"DEBUG: get collection stats {collection_name}: {stats}")
                 row_count = stats.get('row_count', 0)
                 logger.info(f"Current row count: {row_count}, expected: {expected_count}")
                 return row_count >= expected_count
@@ -449,6 +450,7 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
         def check_flush():
             try:
                 downstream_stats = downstream_client.get_collection_stats(collection_name)
+                print(f"DEBUG: get collection stats {collection_name}: {downstream_stats}")
                 return downstream_stats.get('row_count', 0) >= 100
             except:
                 return False
