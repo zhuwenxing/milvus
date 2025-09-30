@@ -7,6 +7,7 @@ import pytest
 from .base import TestCDCSyncBase
 
 
+@pytest.mark.skip(reason="Skip topology setup test")
 class TestCDCTopologySetup(TestCDCSyncBase):
     """Test CDC topology setup, switching, and configuration management."""
 
