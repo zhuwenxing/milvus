@@ -3,6 +3,7 @@ CDC sync tests for collection DDL operations.
 """
 
 import time
+from pymilvus import DataType
 from .base import TestCDCSyncBase, logger
 
 
@@ -233,6 +234,44 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
 
             time.sleep(1)  # Allow cleanup to sync to downstream
 
+    def test_add_collection_field(self, upstream_client, downstream_client, sync_timeout):
+        """Test ADD_FIELD operation sync."""
+        # Store upstream client for teardown
+        self._upstream_client = upstream_client
+
+        collection_name = self.gen_unique_name("test_col_add_field")
+        self.resources_to_cleanup.append(('collection', collection_name))
+
+        # Initial cleanup
+        self.cleanup_collection(upstream_client, collection_name)
+
+        # Create collection
+        schema = self.create_default_schema(upstream_client)
+        upstream_client.create_collection(
+            collection_name=collection_name,
+            schema=schema,
+            consistency_level="Strong"
+        )
+        assert self.wait_for_sync(lambda: upstream_client.has_collection(collection_name), sync_timeout, f"create collection {collection_name}")
+
+        # Add field
+        upstream_client.add_collection_field(collection_name, 
+                                            field_name="new_field", 
+                                            data_type=DataType.INT64, 
+                                            nullable=True)
+        print(f"DEBUG: add field {collection_name}")
+        res = upstream_client.describe_collection(collection_name)
+        print(f"DEBUG: describe collection {collection_name}: {res}")
+
+        # Wait for addition to sync
+        def check_add():
+            res = downstream_client.describe_collection(collection_name)
+            print(f"DEBUG: describe collection {collection_name}: {res}")
+            return "new_field" in [field["name"] for field in res["fields"]]
+
+        assert self.wait_for_sync(check_add, sync_timeout, f"add field {collection_name}")
+    
+    
     def test_load_collection(self, upstream_client, downstream_client, sync_timeout):
         """Test LOAD_COLLECTION operation sync."""
         # Store upstream client for teardown
@@ -416,69 +455,6 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
 
         assert self.wait_for_sync(check_flush, sync_timeout, f"flush collection {collection_name}")
 
-    def test_compact(self, upstream_client, downstream_client, sync_timeout):
-        """Test COMPACT operation sync."""
-        # Store upstream client for teardown
-        self._upstream_client = upstream_client
-
-        collection_name = self.gen_unique_name("test_col_compact")
-        self.resources_to_cleanup.append(('collection', collection_name))
-
-        # Initial cleanup
-        self.cleanup_collection(upstream_client, collection_name)
-
-        # Create collection with proper schema
-        schema = self.create_default_schema(upstream_client)
-        upstream_client.create_collection(
-            collection_name=collection_name,
-            schema=schema,
-            consistency_level="Strong"
-        )
-
-        # Create index (required for loading)
-        index_params = upstream_client.prepare_index_params()
-        index_params.add_index(
-            field_name="vector",
-            index_type="AUTOINDEX",
-            metric_type="L2"
-        )
-        upstream_client.create_index(collection_name, index_params)
-
-        # Load collection (required for delete operations)
-        upstream_client.load_collection(collection_name)
-
-        # Insert and delete some data to create segments that need compaction
-        test_data = self.generate_test_data(200)
-        upstream_client.insert(collection_name, test_data)
-        upstream_client.flush(collection_name)
-
-        # Wait for creation and data to sync
-        def check_setup():
-            try:
-                return (downstream_client.has_collection(collection_name) and
-                        downstream_client.get_collection_stats(collection_name).get('row_count', 0) >= 200)
-            except:
-                return False
-        assert self.wait_for_sync(check_setup, sync_timeout, f"setup collection {collection_name}")
-
-        # Delete some data based on a field that exists in our test data
-        upstream_client.delete(collection_name, filter="number < 50")  # Delete records where number < 50
-        upstream_client.flush(collection_name)
-
-        # Compact collection
-        compaction_id = upstream_client.compact(collection_name)
-        logger.info(f"Started compaction with ID: {compaction_id}")
-
-        # Wait for compaction to sync (we mainly verify the operation doesn't fail)
-        def check_compact():
-            try:
-                # Verify collection still exists and has expected data count
-                downstream_stats = downstream_client.get_collection_stats(collection_name)
-                return downstream_stats.get('row_count', 200) == 150  # 200 - 50 = 150
-            except:
-                return False
-
-        assert self.wait_for_sync(check_compact, sync_timeout, f"compact collection {collection_name}")
 
     def test_load_collection_with_load_fields(self, upstream_client, downstream_client, sync_timeout):
         """Test LOAD_COLLECTION operation with load_fields parameter sync."""

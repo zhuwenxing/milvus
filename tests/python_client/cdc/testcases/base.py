@@ -97,7 +97,7 @@ class TestCDCSyncBase:
 
         # Create schema using MilvusClient API like in the example
         schema = client.create_schema(enable_dynamic_field=True)
-        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+        schema.add_field("id", DataType.INT64, is_primary=True)
         schema.add_field("vector", DataType.FLOAT_VECTOR, dim=128)
 
         return schema
@@ -275,6 +275,7 @@ class TestCDCSyncBase:
         """Generate test data for insert operations."""
         return [
             {
+                "id": i,
                 "vector": [random.random() for _ in range(128)],
                 "text": f"test_text_{i}",
                 "number": i,

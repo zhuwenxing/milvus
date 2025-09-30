@@ -2,12 +2,12 @@
 apiVersion: milvus.io/v1beta1
 kind: Milvus
 metadata:
-  name: cdc-test-source-0929
+  name: cdc-test-source-0930
   namespace: chaos-testing
   labels:
     app: milvus
 spec:
-  mode: cluster
+  mode: standalone
   config:
     common:
       security:

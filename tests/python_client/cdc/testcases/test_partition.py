@@ -200,8 +200,11 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         upstream_client.load_partitions(collection_name, [partition_name])
         for p_name in [partition_name, None]:
             data = [
-                {"vector": [0.1] * 128}
-                for _ in range(100)
+                {
+                    "vector": [0.1] * 128,
+                    "id": i
+                }
+                for i in range(100)
             ]
             upstream_client.insert(collection_name, data, partition_name=p_name)
 
@@ -346,7 +349,8 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         # Create collection and partition
         upstream_client.create_collection(
             collection_name=collection_name,
-            schema=self.create_default_schema(upstream_client)
+            schema=self.create_default_schema(upstream_client),
+            consistency_level="Strong"
         )
         upstream_client.create_partition(collection_name, partition_name)
 
@@ -393,7 +397,21 @@ class TestCDCSyncPartition(TestCDCSyncBase):
         delete_ids = list(range(20))  # Delete first 20 records
         upstream_client.delete(collection_name, filter=f"id in {delete_ids}", partition_name=partition_name)
         upstream_client.flush(collection_name)
-
+        deleted_result = upstream_client.query(
+                    collection_name=collection_name,
+                    filter=f"id in {delete_ids}",
+                    output_fields=["id"],
+                    partition_names=[partition_name]
+                )
+        total_count = upstream_client.query(
+                    collection_name=collection_name,
+                    filter="",
+                    output_fields=["count(*)"],
+                    partition_names=[partition_name]
+                )
+        total_count = total_count[0]["count(*)"] if total_count else 0
+        print(f"DEBUG: deleted_result in upstream: {deleted_result}")
+        print(f"DEBUG: total_count in upstream: {total_count}")
         # Wait for delete to sync by querying partition
         def check_delete():
             try:
