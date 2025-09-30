@@ -16,7 +16,7 @@ spec:
       level: debug
   components:
     version: v2.6.2
-    image: harbor.milvus.io/milvus/milvus:bigsheeper-enhance_DDL_CDC_final-7032594-20250928
+    image: harbor.milvus.io/milvus/milvus:chyezh-enhance_DDL_CDC_final-d5fd0fa-20250929
     disableMetric: false
     cdc:
       replicas: 1
