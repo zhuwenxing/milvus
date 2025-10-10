@@ -4,6 +4,7 @@ CDC sync tests for data manipulation operations.
 
 import time
 import random
+from pymilvus import DataType
 from .base import TestCDCSyncBase, logger
 
 
@@ -823,4 +824,163 @@ class TestCDCSyncDML(TestCDCSyncBase):
             duration = time.time() - start_time
             logger.error(f"[ERROR] Test failed with error: {e}")
             self.log_test_end("test_upsert_comprehensive_alt_data_types", False, duration)
+            raise
+
+    def test_insert_auto_id_consistency(self, upstream_client, downstream_client, sync_timeout):
+        """Test INSERT operation with auto_id to verify upstream and downstream ID consistency."""
+        start_time = time.time()
+        collection_name = self.gen_unique_name("test_col_auto_id")
+
+        # Log test start
+        self.log_test_start("test_insert_auto_id_consistency", "INSERT_AUTO_ID", collection_name)
+
+        # Store upstream client for teardown
+        self._upstream_client = upstream_client
+        self.resources_to_cleanup.append(('collection', collection_name))
+
+        try:
+            # Initial cleanup
+            self.cleanup_collection(upstream_client, collection_name)
+
+            # Create collection with auto_id schema
+            self.log_operation("CREATE_COLLECTION", "collection", collection_name, "upstream")
+            schema = upstream_client.create_schema(enable_dynamic_field=True)
+            schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+            schema.add_field("vector", DataType.FLOAT_VECTOR, dim=128)
+
+            upstream_client.create_collection(
+                collection_name=collection_name,
+                schema=schema
+            )
+
+            # Create index and load collection for querying
+            index_params = upstream_client.prepare_index_params()
+            index_params.add_index(field_name="vector", index_type="AUTOINDEX", metric_type="L2")
+            upstream_client.create_index(
+                collection_name=collection_name,
+                index_params=index_params
+            )
+            upstream_client.load_collection(collection_name)
+
+            # Wait for creation to sync
+            def check_create():
+                return downstream_client.has_collection(collection_name)
+            assert self.wait_for_sync(check_create, sync_timeout, f"create collection {collection_name}")
+
+            # Generate and insert data (without id field, as it will be auto-generated)
+            test_data = [
+                {
+                    "vector": [random.random() for _ in range(128)],
+                    "text": f"test_text_{i}",
+                    "number": i,
+                    "metadata": {"type": "test", "value": i}
+                }
+                for i in range(100)
+            ]
+            logger.info(f"[GENERATED] Generated test data: {len(test_data)} records (without id)")
+
+            self.log_data_operation("INSERT", collection_name, len(test_data), "- starting data insertion with auto_id")
+
+            result = upstream_client.insert(collection_name, test_data)
+            inserted_count = result.get('insert_count', len(test_data))
+
+            self.log_data_operation("INSERT", collection_name, inserted_count, "- insertion completed upstream")
+
+            # Flush to ensure data is persisted
+            logger.info(f"[FLUSH] Flushing collection {collection_name} in upstream")
+            upstream_client.flush(collection_name)
+
+            # Query upstream to get auto-generated IDs
+            logger.info(f"[QUERY] Querying upstream to get auto-generated IDs")
+            upstream_records = upstream_client.query(
+                collection_name=collection_name,
+                filter="",
+                output_fields=["id", "text", "number"],
+                limit=10000
+            )
+
+            upstream_ids = sorted([record["id"] for record in upstream_records])
+            logger.info(f"[UPSTREAM] Retrieved {len(upstream_ids)} records from upstream")
+            logger.info(f"[UPSTREAM] ID range: {min(upstream_ids)} to {max(upstream_ids)}")
+
+            # Log sync verification start
+            self.log_sync_verification("INSERT_AUTO_ID", collection_name, f"{inserted_count} records with matching IDs in downstream")
+
+            # Wait for data sync by querying actual data
+            def check_data():
+                try:
+                    # Query data to verify insertion
+                    result = downstream_client.query(
+                        collection_name=collection_name,
+                        filter="",
+                        output_fields=["count(*)"]
+                    )
+                    count = result[0]["count(*)"] if result else 0
+
+                    if count >= inserted_count:
+                        logger.info(f"[SYNC_OK] Data sync confirmed: {count} records found in downstream")
+                    else:
+                        logger.info(f"[SYNC_PROGRESS] Data sync in progress: {count}/{inserted_count} records in downstream")
+
+                    return count >= inserted_count
+                except Exception as e:
+                    logger.warning(f"Data sync check failed: {e}")
+                    return False
+
+            sync_success = self.wait_for_sync(check_data, sync_timeout, f"insert data to {collection_name}")
+            assert sync_success, f"Data insertion failed to sync to downstream for {collection_name}"
+
+            # Verify ID consistency between upstream and downstream
+            logger.info(f"[VERIFICATION] Verifying ID consistency between upstream and downstream")
+
+            downstream_records = downstream_client.query(
+                collection_name=collection_name,
+                filter="",
+                output_fields=["id", "text", "number"],
+                limit=10000
+            )
+
+            downstream_ids = sorted([record["id"] for record in downstream_records])
+            logger.info(f"[DOWNSTREAM] Retrieved {len(downstream_ids)} records from downstream")
+            logger.info(f"[DOWNSTREAM] ID range: {min(downstream_ids)} to {max(downstream_ids)}")
+
+            # Compare IDs
+            assert len(upstream_ids) == len(downstream_ids), \
+                f"ID count mismatch: upstream={len(upstream_ids)}, downstream={len(downstream_ids)}"
+
+            assert upstream_ids == downstream_ids, \
+                f"ID mismatch detected between upstream and downstream"
+
+            logger.info(f"[SUCCESS] ID consistency verified: {len(upstream_ids)} IDs match between upstream and downstream")
+
+            # Verify some specific records to ensure data integrity
+            upstream_records_dict = {rec["id"]: rec for rec in upstream_records}
+            downstream_records_dict = {rec["id"]: rec for rec in downstream_records}
+
+            sample_ids = random.sample(upstream_ids, min(10, len(upstream_ids)))
+            mismatches = []
+
+            for sample_id in sample_ids:
+                upstream_rec = upstream_records_dict[sample_id]
+                downstream_rec = downstream_records_dict[sample_id]
+
+                if upstream_rec["text"] != downstream_rec["text"] or \
+                   upstream_rec["number"] != downstream_rec["number"]:
+                    mismatches.append(sample_id)
+                    logger.warning(f"[MISMATCH] Data mismatch for ID {sample_id}: "
+                                 f"upstream={upstream_rec}, downstream={downstream_rec}")
+
+            assert len(mismatches) == 0, \
+                f"Data mismatch detected for {len(mismatches)} records with IDs: {mismatches}"
+
+            logger.info(f"[VERIFICATION] Data integrity verified for {len(sample_ids)} sample records")
+
+            # Log test success
+            duration = time.time() - start_time
+            self.log_test_end("test_insert_auto_id_consistency", True, duration)
+
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(f"[ERROR] Test failed with error: {e}")
+            self.log_test_end("test_insert_auto_id_consistency", False, duration)
             raise
