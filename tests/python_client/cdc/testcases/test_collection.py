@@ -3,7 +3,7 @@ CDC sync tests for collection DDL operations.
 """
 
 import time
-from pymilvus import DataType
+from pymilvus import DataType, MilvusClient, Collection, connections
 from .base import TestCDCSyncBase, logger
 
 
@@ -324,6 +324,162 @@ class TestCDCSyncCollectionManagement(TestCDCSyncBase):
                 return False
 
         assert self.wait_for_sync(check_load, sync_timeout, f"load collection {collection_name}")
+
+    def test_load_collection_multi_replicas(self, upstream_client, downstream_client, sync_timeout):
+        """Test LOAD_COLLECTION operation with multiple replicas sync."""
+        # Store upstream client for teardown
+        self._upstream_client = upstream_client
+
+        collection_name = self.gen_unique_name("test_col_multi_replicas")
+        self.resources_to_cleanup.append(('collection', collection_name))
+
+        # Initial cleanup
+        self.cleanup_collection(upstream_client, collection_name)
+
+        # Create collection with proper schema
+        schema = self.create_default_schema(upstream_client)
+        upstream_client.create_collection(
+            collection_name=collection_name,
+            schema=schema,
+            consistency_level="Strong"
+        )
+
+        # Create index (required for loading)
+        index_params = upstream_client.prepare_index_params()
+        index_params.add_index(
+            field_name="vector",
+            index_type="AUTOINDEX",
+            metric_type="L2"
+        )
+        upstream_client.create_index(collection_name, index_params)
+
+        # Wait for creation to sync
+        def check_create():
+            return downstream_client.has_collection(collection_name)
+        assert self.wait_for_sync(check_create, sync_timeout, f"create collection {collection_name}")
+
+        # Load collection with 2 replicas
+        replica_number = 2
+        logger.info(f"Loading collection {collection_name} with {replica_number} replicas")
+        upstream_client.load_collection(collection_name, replica_number=replica_number)
+
+        # Verify upstream load with replicas and check replica count
+        def verify_upstream_replicas():
+            try:
+                # Create Collection object to get replica information
+                upstream_collection = Collection(name=collection_name, using=upstream_client._using)
+
+                # Get replicas information
+                replicas = upstream_collection.get_replicas()
+                actual_replica_count = len(replicas.groups)
+                logger.info(f"Upstream collection {collection_name} has {actual_replica_count} replicas")
+                logger.info(f"Replica details: {replicas}")
+
+                # Verify replica count matches expected
+                if actual_replica_count != replica_number:
+                    logger.warning(f"Expected {replica_number} replicas, but found {actual_replica_count}")
+                    return False
+
+                # Try to perform a search to verify the collection is loaded
+                query_vector = [[0.1] * 128]
+                upstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=[]
+                )
+                logger.info(f"Upstream collection {collection_name} loaded successfully with {actual_replica_count} replicas")
+                return True
+            except Exception as e:
+                logger.warning(f"Upstream load verification failed: {e}")
+                return False
+
+        assert self.wait_for_sync(verify_upstream_replicas, sync_timeout,
+                                f"load collection {collection_name} with {replica_number} replicas in upstream")
+
+        # Wait for load with replicas to sync to downstream
+        def check_downstream_replicas():
+            try:
+                # Create Collection object to get replica information
+                downstream_collection = Collection(name=collection_name, using=downstream_client._using)
+
+                # Get replicas information
+                replicas = downstream_collection.get_replicas()
+                actual_replica_count = len(replicas.groups)
+                logger.info(f"Downstream collection {collection_name} has {actual_replica_count} replicas")
+                logger.info(f"Replica details: {replicas}")
+
+                # Verify replica count matches expected
+                if actual_replica_count != replica_number:
+                    logger.warning(f"Expected {replica_number} replicas in downstream, but found {actual_replica_count}")
+                    return False
+
+                # Try to perform a search to verify the collection is loaded in downstream
+                query_vector = [[0.1] * 128]
+                downstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=[]
+                )
+                logger.info(f"Downstream collection {collection_name} loaded successfully with {actual_replica_count} replicas")
+                return True
+            except Exception as e:
+                logger.warning(f"Downstream load check failed: {e}")
+                return False
+
+        assert self.wait_for_sync(check_downstream_replicas, sync_timeout,
+                                f"load collection {collection_name} with {replica_number} replicas in downstream")
+
+        logger.info(f"Successfully verified multi-replica load sync for collection {collection_name}")
+        logger.info(f"Both upstream and downstream have {replica_number} replicas")
+
+        # Now test release with multiple replicas
+        logger.info(f"Testing release operation for multi-replica collection {collection_name}")
+        upstream_client.release_collection(collection_name)
+
+        # Verify upstream release
+        def verify_upstream_release():
+            try:
+                # Try to search - should fail if released
+                query_vector = [[0.1] * 128]
+                upstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=[]
+                )
+                logger.warning(f"Upstream collection {collection_name} is still loaded (search succeeded)")
+                return False  # If search succeeds, collection is still loaded
+            except Exception as e:
+                logger.info(f"Upstream collection {collection_name} released successfully (search failed as expected): {e}")
+                return True   # If search fails, collection is released
+
+        assert self.wait_for_sync(verify_upstream_release, sync_timeout,
+                                f"release collection {collection_name} in upstream")
+
+        # Wait for release to sync to downstream
+        def check_downstream_release():
+            try:
+                # Try to search - should fail if released
+                query_vector = [[0.1] * 128]
+                downstream_client.search(
+                    collection_name=collection_name,
+                    data=query_vector,
+                    limit=1,
+                    output_fields=[]
+                )
+                logger.warning(f"Downstream collection {collection_name} is still loaded (search succeeded)")
+                return False  # If search succeeds, collection is still loaded
+            except Exception as e:
+                logger.info(f"Downstream collection {collection_name} released successfully (search failed as expected): {e}")
+                return True   # If search fails, collection is released
+
+        assert self.wait_for_sync(check_downstream_release, sync_timeout,
+                                f"release collection {collection_name} in downstream")
+
+        logger.info(f"Successfully verified multi-replica release sync for collection {collection_name}")
+        logger.info(f"Both upstream and downstream released the collection with {replica_number} replicas")
 
     def test_release_collection(self, upstream_client, downstream_client, sync_timeout):
         """Test RELEASE_COLLECTION operation sync."""
