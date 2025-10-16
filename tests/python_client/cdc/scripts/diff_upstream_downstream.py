@@ -18,7 +18,6 @@ from loguru import logger
 import json
 import collections.abc
 from deepdiff import DeepDiff
-from py import log
 from pymilvus import connections, Collection, db, list_collections
 import threading
 
