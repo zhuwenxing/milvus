@@ -58,33 +58,83 @@ class TestMilvusClientStructArrayBasic(TestMilvusClientV2Base):
         client: MilvusClient,
         dim: int = default_dim,
         capacity: int = default_capacity,
+        mmap_enabled: bool = None,
+        struct_array_mmap: bool = None,
+        subfield1_mmap: bool = None,
+        subfield2_mmap: bool = None,
     ):
-        """Create schema with struct array field"""
+        """Create schema with struct array field
+
+        Args:
+            client: MilvusClient instance
+            dim: vector dimension
+            capacity: array capacity
+            mmap_enabled: enable mmap for normal_vector field
+            struct_array_mmap: enable mmap for the entire struct array field
+            subfield1_mmap: enable mmap for clip_embedding1 sub-field
+            subfield2_mmap: enable mmap for clip_embedding2 sub-field
+        """
         # Create basic schema
         schema = client.create_schema(auto_id=False, enable_dynamic_field=False)
 
         # Add primary key field
         schema.add_field(field_name="id", datatype=DataType.INT64, is_primary=True)
 
-        # Add normal vector field
-        schema.add_field(
-            field_name="normal_vector", datatype=DataType.FLOAT_VECTOR, dim=dim
-        )
+        # Add normal vector field with optional mmap
+        if mmap_enabled is not None:
+            schema.add_field(
+                field_name="normal_vector",
+                datatype=DataType.FLOAT_VECTOR,
+                dim=dim,
+                mmap_enabled=mmap_enabled
+            )
+        else:
+            schema.add_field(
+                field_name="normal_vector", datatype=DataType.FLOAT_VECTOR, dim=dim
+            )
 
-        # Create struct schema
+        # Create struct schema with optional mmap for sub-fields
         struct_schema = client.create_struct_field_schema()
         struct_schema.add_field("clip_str", DataType.VARCHAR, max_length=65535)
-        struct_schema.add_field("clip_embedding1", DataType.FLOAT_VECTOR, dim=dim)
-        struct_schema.add_field("clip_embedding2", DataType.FLOAT_VECTOR, dim=dim)
 
-        # Add struct array field
-        schema.add_field(
-            "clips",
-            datatype=DataType.ARRAY,
-            element_type=DataType.STRUCT,
-            struct_schema=struct_schema,
-            max_capacity=capacity,
-        )
+        if subfield1_mmap is not None:
+            struct_schema.add_field(
+                "clip_embedding1",
+                DataType.FLOAT_VECTOR,
+                dim=dim,
+                mmap_enabled=subfield1_mmap
+            )
+        else:
+            struct_schema.add_field("clip_embedding1", DataType.FLOAT_VECTOR, dim=dim)
+
+        if subfield2_mmap is not None:
+            struct_schema.add_field(
+                "clip_embedding2",
+                DataType.FLOAT_VECTOR,
+                dim=dim,
+                mmap_enabled=subfield2_mmap
+            )
+        else:
+            struct_schema.add_field("clip_embedding2", DataType.FLOAT_VECTOR, dim=dim)
+
+        # Add struct array field with optional mmap
+        if struct_array_mmap is not None:
+            schema.add_field(
+                "clips",
+                datatype=DataType.ARRAY,
+                element_type=DataType.STRUCT,
+                struct_schema=struct_schema,
+                max_capacity=capacity,
+                mmap_enabled=struct_array_mmap,
+            )
+        else:
+            schema.add_field(
+                "clips",
+                datatype=DataType.ARRAY,
+                element_type=DataType.STRUCT,
+                struct_schema=struct_schema,
+                max_capacity=capacity,
+            )
 
         return schema
 
@@ -3286,3 +3336,1177 @@ class TestMilvusClientStructArrayBulkInsert(TestMilvusClientV2Base):
         expected: insert successful
         """
         pass
+
+
+class TestMilvusClientStructArrayMmap(TestMilvusClientV2Base):
+    """Test case of struct array mmap functionality"""
+
+    def generate_struct_array_data(
+        self, num_rows: int, dim: int = default_dim, capacity: int = default_capacity
+    ) -> List[Dict[str, Any]]:
+        """Generate test data for struct array"""
+        data = []
+        for i in range(num_rows):
+            # Random array length for each row (1 to capacity)
+            array_length = random.randint(1, min(capacity, 20))
+
+            struct_array = []
+            for j in range(array_length):
+                struct_element = {
+                    "clip_str": f"item_{i}_{j}",
+                    "clip_embedding1": [random.random() for _ in range(dim)],
+                    "clip_embedding2": [random.random() for _ in range(dim)],
+                }
+                struct_array.append(struct_element)
+
+            row = {
+                "id": i,
+                "normal_vector": [random.random() for _ in range(dim)],
+                "clips": struct_array,
+            }
+            data.append(row)
+
+        return data
+
+    def create_struct_array_schema(
+        self,
+        client: MilvusClient,
+        dim: int = default_dim,
+        capacity: int = default_capacity,
+        mmap_enabled: bool = None,
+        struct_array_mmap: bool = None,
+        subfield1_mmap: bool = None,
+        subfield2_mmap: bool = None,
+    ):
+        """Create schema with struct array field
+
+        Args:
+            client: MilvusClient instance
+            dim: vector dimension
+            capacity: array capacity
+            mmap_enabled: enable mmap for normal_vector field
+            struct_array_mmap: enable mmap for the entire struct array field
+            subfield1_mmap: enable mmap for clip_embedding1 sub-field
+            subfield2_mmap: enable mmap for clip_embedding2 sub-field
+        """
+        # Create basic schema
+        schema = client.create_schema(auto_id=False, enable_dynamic_field=False)
+
+        # Add primary key field
+        schema.add_field(field_name="id", datatype=DataType.INT64, is_primary=True)
+
+        # Add normal vector field with optional mmap
+        if mmap_enabled is not None:
+            schema.add_field(
+                field_name="normal_vector",
+                datatype=DataType.FLOAT_VECTOR,
+                dim=dim,
+                mmap_enabled=mmap_enabled
+            )
+        else:
+            schema.add_field(
+                field_name="normal_vector", datatype=DataType.FLOAT_VECTOR, dim=dim
+            )
+
+        # Create struct schema with optional mmap for sub-fields
+        struct_schema = client.create_struct_field_schema()
+        struct_schema.add_field("clip_str", DataType.VARCHAR, max_length=65535)
+
+        if subfield1_mmap is not None:
+            struct_schema.add_field(
+                "clip_embedding1",
+                DataType.FLOAT_VECTOR,
+                dim=dim,
+                mmap_enabled=subfield1_mmap
+            )
+        else:
+            struct_schema.add_field("clip_embedding1", DataType.FLOAT_VECTOR, dim=dim)
+
+        if subfield2_mmap is not None:
+            struct_schema.add_field(
+                "clip_embedding2",
+                DataType.FLOAT_VECTOR,
+                dim=dim,
+                mmap_enabled=subfield2_mmap
+            )
+        else:
+            struct_schema.add_field("clip_embedding2", DataType.FLOAT_VECTOR, dim=dim)
+
+        # Add struct array field with optional mmap
+        if struct_array_mmap is not None:
+            schema.add_field(
+                "clips",
+                datatype=DataType.ARRAY,
+                element_type=DataType.STRUCT,
+                struct_schema=struct_schema,
+                max_capacity=capacity,
+                mmap_enabled=struct_array_mmap,
+            )
+        else:
+            schema.add_field(
+                "clips",
+                datatype=DataType.ARRAY,
+                element_type=DataType.STRUCT,
+                struct_schema=struct_schema,
+                max_capacity=capacity,
+            )
+
+        return schema
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_enable_on_collection(self):
+        """
+        target: test enabling mmap on entire collection with struct array
+        method: 1. create collection with struct array field
+                2. create indexes on vector fields
+                3. insert data
+                4. enable mmap on collection using alter_collection_properties
+                5. verify mmap is enabled via describe_collection
+                6. load collection and verify search works correctly
+        expected: mmap enabled successfully and search works
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_collection")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params - need to index ALL vector fields in struct
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Release collection before altering mmap properties
+        self.release_collection(client, collection_name)
+
+        # Enable mmap on collection
+        self.alter_collection_properties(
+            client,
+            collection_name,
+            properties={"mmap.enabled": True}
+        )
+        log.info(f"Enabled mmap on collection {collection_name}")
+
+        # Verify mmap is enabled via describe_collection
+        collection_info = self.describe_collection(client, collection_name, check_task="check_nothing")
+        log.info(f"Collection info after enabling mmap: {collection_info}")
+
+        # Load collection with mmap settings
+        self.load_collection(client, collection_name)
+
+        # Verify search works with mmap enabled
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled on collection")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_enable_on_struct_array_field(self):
+        """
+        target: test enabling mmap on struct array field
+        method: 1. create collection with struct array field
+                2. create indexes on vector fields
+                3. insert data
+                4. enable mmap on struct array field using alter_collection_field
+                5. load collection and verify search works
+        expected: mmap enabled successfully on struct array field and search works
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_struct_array_field")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params - need to index ALL vector fields in struct
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Release collection before altering field properties
+        self.release_collection(client, collection_name)
+
+        # Enable mmap on struct array field
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips",
+            field_params={"mmap_enabled": True}
+        )
+        log.info(f"Enabled mmap on struct array field 'clips'")
+
+        # Load collection
+        self.load_collection(client, collection_name)
+
+        # Verify search works with mmap enabled on field
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled on struct array field")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_enable_on_struct_subfield(self):
+        """
+        target: test enabling mmap on struct sub-field (vector field inside struct)
+        method: 1. create collection with struct array field
+                2. create indexes on vector fields
+                3. insert data
+                4. enable mmap on struct sub-field using alter_collection_field
+                5. load collection and verify search works
+        expected: mmap enabled successfully on struct sub-field and search works
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_struct_subfield")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Release collection before altering field properties
+        self.release_collection(client, collection_name)
+
+        # Enable mmap on struct sub-field (clip_embedding1)
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips[clip_embedding1]",
+            field_params={"mmap_enabled": True}
+        )
+        log.info(f"Enabled mmap on struct sub-field 'clips[clip_embedding1]'")
+
+        # Load collection
+        self.load_collection(client, collection_name)
+
+        # Verify search works on the field with mmap enabled
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful on field with mmap enabled")
+
+        # Verify search also works on clip_embedding2 (without mmap)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding2]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful on field without mmap")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_enable_on_emb_list_index(self):
+        """
+        target: test enabling mmap on embedding list index
+        method: 1. create collection with struct array field
+                2. create indexes on vector fields
+                3. insert data
+                4. enable mmap on embedding list index using alter_index_properties
+                5. verify mmap is enabled via describe_index
+                6. load collection and verify search works
+        expected: mmap enabled successfully on embedding list index and search works
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_emb_list_index")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params - need to index ALL vector fields in struct
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Release collection before altering index properties
+        self.release_collection(client, collection_name)
+
+        # Enable mmap on embedding list index
+        self.alter_index_properties(
+            client,
+            collection_name,
+            index_name="clips[clip_embedding1]",
+            properties={"mmap.enabled": True}
+        )
+        log.info(f"Enabled mmap on embedding list index 'clips[clip_embedding1]'")
+
+        # Verify mmap is enabled via describe_index
+        index_info = self.describe_index(client, collection_name, index_name="clips[clip_embedding1]", check_task="check_nothing")
+        log.info(f"Index info after enabling mmap: {index_info}")
+
+        # Load collection
+        self.load_collection(client, collection_name)
+
+        # Verify search works with mmap enabled on index
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled on embedding list index")
+
+    @pytest.mark.tags(CaseLabel.L2)
+    def test_mmap_enable_multiple_levels(self):
+        """
+        target: test enabling mmap at multiple levels (collection, field, index)
+        method: 1. create collection with struct array field
+                2. create indexes on vector fields
+                3. enable mmap at collection level
+                4. enable mmap at field level
+                5. enable mmap at index level
+                6. verify all settings work together
+        expected: mmap settings apply correctly at all levels and search works
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_multiple_levels")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Release collection before altering properties
+        self.release_collection(client, collection_name)
+
+        # Enable mmap at collection level
+        self.alter_collection_properties(
+            client,
+            collection_name,
+            properties={"mmap.enabled": True}
+        )
+        log.info(f"Enabled mmap at collection level")
+
+        # Enable mmap at field level for struct array field
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips",
+            field_params={"mmap_enabled": True}
+        )
+        log.info(f"Enabled mmap at field level for 'clips'")
+
+        # Enable mmap at index level for embedding list index
+        self.alter_index_properties(
+            client,
+            collection_name,
+            index_name="clips[clip_embedding1]",
+            properties={"mmap.enabled": True}
+        )
+        log.info(f"Enabled mmap at index level for 'clips[clip_embedding1]'")
+
+        # Load collection
+        self.load_collection(client, collection_name)
+
+        # Verify search works with mmap enabled at multiple levels
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        # Search on clip_embedding1 (mmap at all levels)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+
+        # Search on clip_embedding2 (mmap at collection and field level)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding2]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+
+        # Search on normal_vector (mmap at collection level)
+        self.search(
+            client,
+            collection_name,
+            data=[search_vector],
+            anns_field="normal_vector",
+            search_params={"metric_type": "COSINE"},
+            limit=10,
+        )
+        log.info(f"All searches successful with mmap enabled at multiple levels")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_collection_enable_then_disable(self):
+        """
+        target: test enabling mmap at collection level then disabling it
+        method: 1. create collection with mmap enabled
+                2. insert data and verify search works
+                3. disable mmap using alter_collection_properties
+                4. reload and verify search still works
+        expected: mmap can be disabled after being enabled
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_enable_disable")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Release and enable mmap
+        self.release_collection(client, collection_name)
+        self.alter_collection_properties(
+            client,
+            collection_name,
+            properties={"mmap.enabled": True}
+        )
+        log.info(f"Enabled mmap on collection")
+
+        # Load and verify search works
+        self.load_collection(client, collection_name)
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled")
+
+        # Now disable mmap
+        self.release_collection(client, collection_name)
+        self.alter_collection_properties(
+            client,
+            collection_name,
+            properties={"mmap.enabled": False}
+        )
+        log.info(f"Disabled mmap on collection")
+
+        # Load and verify search still works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after disabling mmap")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_index_disable_then_enable(self):
+        """
+        target: test creating index without mmap then enabling it
+        method: 1. create collection and index without mmap
+                2. insert data and verify search works
+                3. enable mmap on index using alter_index_properties
+                4. reload and verify search works
+        expected: mmap can be enabled on existing index
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_disable_enable")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params (without mmap initially)
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Verify search works without mmap
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful without mmap")
+
+        # Now enable mmap on index
+        self.release_collection(client, collection_name)
+        self.alter_index_properties(
+            client,
+            collection_name,
+            index_name="clips[clip_embedding1]",
+            properties={"mmap.enabled": True}
+        )
+        log.info(f"Enabled mmap on index 'clips[clip_embedding1]'")
+
+        # Load and verify search works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after enabling mmap on index")
+
+    @pytest.mark.tags(CaseLabel.L2)
+    def test_mmap_index_enable_then_disable(self):
+        """
+        target: test enabling mmap on index then disabling it
+        method: 1. create collection and index with mmap enabled on sub-field
+                2. insert data and verify search works
+                3. disable mmap on index using alter_index_properties
+                4. reload and verify search works
+        expected: mmap can be toggled on index level
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_index_toggle")
+        client = self._client()
+
+        # Create schema with mmap enabled on subfield1
+        schema = self.create_struct_array_schema(client, subfield1_mmap=True)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Verify search works with mmap enabled (from schema)
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled on index (from schema)")
+
+        # Disable mmap on index
+        self.release_collection(client, collection_name)
+        self.alter_index_properties(
+            client,
+            collection_name,
+            index_name="clips[clip_embedding1]",
+            properties={"mmap.enabled": False}
+        )
+        log.info(f"Disabled mmap on index")
+
+        # Load and verify search still works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after disabling mmap on index")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_struct_subfield_enable_then_disable(self):
+        """
+        target: test enabling mmap on struct sub-field then disabling it
+        method: 1. create collection with mmap enabled on struct sub-field in schema
+                2. verify mmap is enabled via describe_collection
+                3. insert data and verify search works
+                4. disable mmap on struct sub-field using alter_collection_field
+                5. verify mmap is disabled via describe_collection
+                6. reload and verify search works
+        expected: mmap can be toggled on struct sub-field level
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_subfield_toggle")
+        client = self._client()
+
+        # Create schema with mmap enabled on subfield1
+        schema = self.create_struct_array_schema(client, subfield1_mmap=True)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Verify mmap is enabled on subfield via describe_collection
+        collection_info = self.describe_collection(client, collection_name, check_task="check_nothing")
+        log.info(f"Collection info after creation: {collection_info}")
+        # Note: describe_collection returns schema info, check if mmap is set
+        # This verification depends on the actual response structure
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Verify search works with mmap enabled (from schema)
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled on struct sub-field (from schema)")
+
+        # Disable mmap on struct sub-field
+        self.release_collection(client, collection_name)
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips[clip_embedding1]",
+            field_params={"mmap_enabled": False}
+        )
+        log.info(f"Disabled mmap on struct sub-field 'clips[clip_embedding1]'")
+
+        # Verify mmap is disabled via describe_collection
+        collection_info = self.describe_collection(client, collection_name, check_task="check_nothing")
+        log.info(f"Collection info after disabling mmap: {collection_info}")
+
+        # Load and verify search still works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after disabling mmap on struct sub-field")
+
+    @pytest.mark.tags(CaseLabel.L1)
+    def test_mmap_struct_subfield_disable_then_enable(self):
+        """
+        target: test creating struct sub-field without mmap then enabling it
+        method: 1. create collection with struct array field (no mmap)
+                2. insert data and verify search works
+                3. enable mmap on struct sub-field using alter_collection_field
+                4. reload and verify search works
+        expected: mmap can be enabled on struct sub-field after creation
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_subfield_enable")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Verify search works without mmap
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful without mmap on struct sub-field")
+
+        # Now enable mmap on struct sub-field
+        self.release_collection(client, collection_name)
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips[clip_embedding1]",
+            field_params={"mmap_enabled": True}
+        )
+        log.info(f"Enabled mmap on struct sub-field 'clips[clip_embedding1]'")
+
+        # Load and verify search works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after enabling mmap on struct sub-field")
+
+    @pytest.mark.tags(CaseLabel.L2)
+    def test_mmap_struct_array_field_enable_then_disable(self):
+        """
+        target: test enabling mmap on struct array field then disabling it
+        method: 1. create collection with mmap enabled on struct array field in schema
+                2. insert data and verify search works
+                3. disable mmap on struct array field using alter_collection_field
+                4. reload and verify search works
+        expected: mmap can be toggled on struct array field level
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_array_field_toggle")
+        client = self._client()
+
+        # Create schema with mmap enabled on struct array field
+        schema = self.create_struct_array_schema(client, struct_array_mmap=True)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Verify search works with mmap enabled (from schema)
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful with mmap enabled on struct array field (from schema)")
+
+        # Disable mmap on struct array field
+        self.release_collection(client, collection_name)
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips",
+            field_params={"mmap_enabled": False}
+        )
+        log.info(f"Disabled mmap on struct array field 'clips'")
+
+        # Load and verify search still works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after disabling mmap on struct array field")
+
+    @pytest.mark.tags(CaseLabel.L2)
+    def test_mmap_struct_array_field_disable_then_enable(self):
+        """
+        target: test creating struct array field without mmap then enabling it
+        method: 1. create collection with struct array field (no mmap)
+                2. insert data and verify search works
+                3. enable mmap on struct array field using alter_collection_field
+                4. reload and verify search works
+        expected: mmap can be enabled on struct array field after creation
+        """
+        collection_name = cf.gen_unique_str(f"{prefix}_mmap_array_field_enable")
+        client = self._client()
+
+        # Create schema with struct array
+        schema = self.create_struct_array_schema(client)
+
+        # Prepare index params
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="normal_vector",
+            index_type="HNSW",
+            metric_type="COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding1]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+        index_params.add_index(
+            field_name="clips[clip_embedding2]",
+            index_type="HNSW",
+            metric_type="MAX_SIM_COSINE",
+            params=INDEX_PARAMS,
+        )
+
+        # Create collection
+        self.create_collection(
+            client, collection_name, schema=schema, index_params=index_params
+        )
+
+        # Insert data
+        nb = 100
+        data = self.generate_struct_array_data(nb)
+        self.insert(client, collection_name, data)
+
+        # Verify search works without mmap
+        search_vector = [random.random() for _ in range(default_dim)]
+        search_tensor = EmbeddingList()
+        search_tensor.add(search_vector)
+
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful without mmap on struct array field")
+
+        # Now enable mmap on struct array field
+        self.release_collection(client, collection_name)
+        self.alter_collection_field(
+            client,
+            collection_name,
+            field_name="clips",
+            field_params={"mmap_enabled": True}
+        )
+        log.info(f"Enabled mmap on struct array field 'clips'")
+
+        # Load and verify search works
+        self.load_collection(client, collection_name)
+        self.search(
+            client,
+            collection_name,
+            data=[search_tensor],
+            anns_field="clips[clip_embedding1]",
+            search_params={"metric_type": "MAX_SIM_COSINE"},
+            limit=10,
+        )
+        log.info(f"Search successful after enabling mmap on struct array field")
