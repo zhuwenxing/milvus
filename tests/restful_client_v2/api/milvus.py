@@ -1128,6 +1128,36 @@ class DatabaseClient(Requests):
         return response.json()
 
 
+class CommonClient(Requests):
+
+    def __init__(self, endpoint, token):
+        super().__init__(url=endpoint, api_key=token)
+        self.endpoint = endpoint
+        self.api_key = token
+        self.db_name = None
+        self.headers = self.update_headers()
+
+    @classmethod
+    def update_headers(cls):
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {cls.api_key}',
+            'RequestId': cls.uuid,
+            "Request-Timeout": REQUEST_TIMEOUT
+        }
+        return headers
+
+    def run_analyzer(self, payload, db_name="default"):
+        """Run analyzer on text"""
+        url = f"{self.endpoint}/v2/vectordb/common/run_analyzer"
+        if self.db_name is not None:
+            payload["dbName"] = self.db_name
+        if db_name != "default":
+            payload["dbName"] = db_name
+        response = self.post(url, headers=self.update_headers(), data=payload)
+        return response.json()
+
+
 class StorageClient():
 
     def __init__(self, endpoint, access_key, secret_key, bucket_name, root_path="file"):

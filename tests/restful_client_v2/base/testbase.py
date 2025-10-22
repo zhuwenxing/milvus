@@ -6,7 +6,7 @@ import uuid
 from pymilvus import connections, db, MilvusClient
 from utils.util_log import test_log as logger
 from api.milvus import (VectorClient, CollectionClient, PartitionClient, IndexClient, AliasClient,
-                        UserClient, RoleClient, ImportJobClient, StorageClient, Requests, DatabaseClient)
+                        UserClient, RoleClient, ImportJobClient, StorageClient, Requests, DatabaseClient, CommonClient)
 from utils.utils import get_data_by_payload
 
 
@@ -35,6 +35,7 @@ class Base:
     storage_client = None
     milvus_client = None
     database_client = None
+    common_client = None
 
 
 class TestBase(Base):
@@ -103,6 +104,8 @@ class TestBase(Base):
         self.storage_client = StorageClient(f"{minio_host}:9000", "minioadmin", "minioadmin", bucket_name, root_path)
         self.database_client = DatabaseClient(self.endpoint, self.api_key)
         self.database_client.update_uuid(_uuid)
+        self.common_client = CommonClient(self.endpoint, self.api_key)
+        self.common_client.update_uuid(_uuid)
         if token is None:
             self.vector_client.api_key = None
             self.collection_client.api_key = None
