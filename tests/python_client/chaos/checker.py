@@ -15,6 +15,7 @@ from time import sleep
 from pymilvus import AnnSearchRequest, RRFRanker, MilvusClient, DataType, CollectionSchema, connections
 from pymilvus.milvus_client.index import IndexParams
 from pymilvus.bulk_writer import RemoteBulkWriter, BulkFileType
+from pymilvus.client.embedding_list import EmbeddingList
 from common import common_func as cf
 from common import common_type as ct
 from common.milvus_sys import MilvusSys
@@ -221,6 +222,7 @@ class Op(Enum):
     release_collection = 'release_collection'
     release_partition = 'release_partition'
     search = 'search'
+    tensor_search = 'tensor_search'
     full_text_search = 'full_text_search'
     hybrid_search = 'hybrid_search'
     query = 'query'
@@ -918,6 +920,74 @@ class SearchChecker(Checker):
             self.search_param = constants.DEFAULT_SEARCH_PARAM
         elif anns_field_item["dtype"] == DataType.INT8_VECTOR:
             self.search_param = constants.DEFAULT_INT8_SEARCH_PARAM
+
+        res, result = self.search()
+        return res, result
+
+    def keep_running(self):
+        while self._keep_running:
+            self.run_task()
+            sleep(constants.WAIT_PER_OP / 10)
+
+class TensorSearchChecker(Checker):
+    """check search operations for struct array vector fields in a dependent thread"""
+
+    def __init__(self, collection_name=None, shards_num=2, schema=None):
+        if collection_name is None:
+            collection_name = cf.gen_unique_str("TensorSearchChecker_")
+        super().__init__(collection_name=collection_name, shards_num=shards_num, schema=schema)
+        self.insert_data()
+        # Only get struct array vector fields
+        self.struct_array_vector_field_list = cf.get_struct_array_vector_field_list(self.schema)
+        self.data = None
+        self.anns_field_name = None
+        self.search_param = None
+
+    @staticmethod
+    def _create_embedding_list(dim, num_vectors, dtype):
+        """Create EmbeddingList for struct array vector search"""
+        embedding_list = EmbeddingList()
+        vectors = cf.gen_vectors(num_vectors, dim, vector_data_type=dtype)
+        for vector in vectors:
+            embedding_list.add(vector)
+        return embedding_list
+
+    @trace()
+    def search(self):
+        try:
+            res = self.milvus_client.search(
+                collection_name=self.c_name,
+                data=self.data,
+                anns_field=self.anns_field_name,
+                search_params=self.search_param,
+                limit=1,
+                partition_names=self.p_names,
+                timeout=search_timeout
+            )
+            return res, True
+        except Exception as e:
+            return str(e), False
+
+    @exception_handler()
+    def run_task(self):
+        if not self.struct_array_vector_field_list:
+            log.warning("No struct array vector fields available for search")
+            return None, False
+
+        # Randomly select a struct array vector field
+        anns_field_item = random.choice(self.struct_array_vector_field_list)
+        dim = anns_field_item["dim"]
+        dtype = anns_field_item["dtype"]
+
+        # Use the anns_field format: struct_field[vector_field]
+        self.anns_field_name = anns_field_item["anns_field"]
+
+        # Create EmbeddingList with random number of vectors (1-5)
+        num_vectors = random.randint(1, 5)
+        self.data = [self._create_embedding_list(dim, num_vectors, dtype)]
+
+        # Use MAX_SIM_COSINE for struct array vector search
+        self.search_param = {"metric_type": "MAX_SIM_COSINE"}
 
         res, result = self.search()
         return res, result

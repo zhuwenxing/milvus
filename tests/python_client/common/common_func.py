@@ -2140,6 +2140,40 @@ def get_dense_anns_field_name_list(schema=None):
             anns_fields.append(item)
     return anns_fields
 
+def get_struct_array_vector_field_list(schema=None):
+    if schema is None:
+        schema = gen_default_collection_schema()
+
+    struct_fields = schema.struct_fields
+    struct_vector_fields = []
+
+    for struct_field in struct_fields:
+            struct_field_name = struct_field.name
+            # Check each sub-field for vector types
+            for sub_field in struct_field.fields:
+                sub_field_name = sub_field.name if hasattr(sub_field, 'name') else sub_field.get('name')
+                sub_field_dtype = sub_field.dtype if hasattr(sub_field, 'dtype') else sub_field.get('type')
+
+                if sub_field_dtype in [DataType.FLOAT_VECTOR, DataType.FLOAT16_VECTOR,
+                                      DataType.BFLOAT16_VECTOR, DataType.INT8_VECTOR,
+                                      DataType.BINARY_VECTOR]:
+                    # Get dimension
+                    if hasattr(sub_field, 'params'):
+                        dim = sub_field.params.get('dim')
+                    else:
+                        dim = sub_field.get('params', {}).get('dim')
+
+                    item = {
+                        "struct_field": struct_field_name,
+                        "vector_field": sub_field_name,
+                        "anns_field": f"{struct_field_name}[{sub_field_name}]",
+                        "dtype": sub_field_dtype,
+                        "dim": dim
+                    }
+                    struct_vector_fields.append(item)
+
+    return struct_vector_fields
+
 
 def gen_varchar_data(length: int, nb: int, text_mode=False):
     if text_mode:
