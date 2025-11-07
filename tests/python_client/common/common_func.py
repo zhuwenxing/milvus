@@ -1936,7 +1936,6 @@ def gen_row_data_by_schema(nb=ct.default_nb, schema=None, start=0, random_pk=Fal
             field_name = struct_field.get('name', None)
             struct_data = gen_struct_array_data(struct_field, start=start, random_pk=random_pk)
             tmp[field_name] = struct_data
-            log.debug(f"[gen_row_data_by_schema] Generated struct array '{field_name}': {len(struct_data)} items")
 
         data.append(tmp)
 
