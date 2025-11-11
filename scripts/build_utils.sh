@@ -63,9 +63,11 @@ compute_hash() {
     local hash=""
     for file in "${files[@]}"; do
         if [ -f "$file" ]; then
-            hash="${hash}$(sha256sum "$file")"
+            # Use only the hash part, not the filename
+            hash="${hash}$(sha256sum "$file" | cut -d' ' -f1)"
         elif [ -d "$file" ]; then
-            hash="${hash}$(find "$file" -type f -exec sha256sum {} \; 2>/dev/null || true)"
+            # For directories, hash all files sorted by path
+            hash="${hash}$(find "$file" -type f -print0 2>/dev/null | sort -z | xargs -0 sha256sum 2>/dev/null | cut -d' ' -f1 || true)"
         fi
     done
 

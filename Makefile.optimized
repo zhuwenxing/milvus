@@ -146,7 +146,7 @@ dev-setup:
 # Cache management
 .PHONY: cache-status
 cache-status:
-	@bash $(PWD)/scripts/build_utils.sh && show_cache_status
+	@bash -c "source $(PWD)/scripts/build_utils.sh && show_cache_status"
 
 .PHONY: clean-soft
 clean-soft:
