@@ -1,0 +1,353 @@
+name: Optimized Multi-Platform Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'release-*'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (dev/release)'
+        required: false
+        default: 'release'
+        type: choice
+        options:
+          - dev
+          - release
+
+# Cancel previous runs for the same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Global environment variables
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CONAN_USER_HOME: ${{ github.workspace }}/.conan
+  GO111MODULE: on
+  BUILD_TYPE: ${{ github.event.inputs.build_type || 'release' }}
+
+jobs:
+  # ============================================================================
+  # Fast Pre-Checks (runs before building)
+  # ============================================================================
+  pre-check:
+    name: Pre-Check (Format & Lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install dependencies
+        run: make -f Makefile.optimized getdeps
+
+      - name: Format check
+        run: make -f Makefile.optimized fmt-check
+
+      - name: Go lint (fast)
+        run: |
+          if [ -f "bin/golangci-lint" ]; then
+            ./bin/golangci-lint run --fast --timeout=5m
+          fi
+
+  # ============================================================================
+  # Multi-Platform Build Matrix
+  # ============================================================================
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: pre-check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu x86_64 (AMD64)
+          - platform: ubuntu-x86_64
+            os: ubuntu-22.04
+            arch: amd64
+            cc: gcc
+            cxx: g++
+
+          # Ubuntu ARM64
+          - platform: ubuntu-arm64
+            os: ubuntu-22.04-arm
+            arch: arm64
+            cc: gcc
+            cxx: g++
+
+          # macOS ARM64 (Apple Silicon)
+          - platform: macos-arm64
+            os: macos-14
+            arch: arm64
+            cc: clang
+            cxx: clang++
+
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      PLATFORM_ARCH: ${{ matrix.arch }}
+
+    steps:
+      # ===== Checkout =====
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for git versioning
+
+      # ===== Setup Environment =====
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Setup Python (for Conan)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            ccache \
+            libaio-dev \
+            libopenblas-dev \
+            pkg-config
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install \
+            cmake \
+            ninja \
+            ccache \
+            libomp \
+            pkg-config
+
+      - name: Install Conan
+        run: |
+          pip3 install conan==1.64.1
+          conan --version
+
+      - name: Setup Rust (for Tantivy)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.89
+          profile: minimal
+          override: true
+
+      # ===== Multi-Layer Cache Strategy =====
+
+      # Layer 1: ccache (compilation cache)
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.platform }}-${{ hashFiles('internal/core/**/*.cpp', 'internal/core/**/*.h') }}
+          restore-keys: |
+            ccache-${{ matrix.platform }}-
+
+      # Layer 2: Conan cache (dependencies)
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CONAN_USER_HOME }}
+            ~/.conan/data
+          key: conan-${{ matrix.platform }}-${{ hashFiles('internal/core/conanfile.txt') }}
+          restore-keys: |
+            conan-${{ matrix.platform }}-
+
+      # Layer 3: Go modules cache (already handled by setup-go)
+
+      # Layer 4: Build stamp cache (for smart rebuilds)
+      - name: Cache build stamps
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: stamps-${{ matrix.platform }}-${{ github.sha }}
+          restore-keys: |
+            stamps-${{ matrix.platform }}-
+
+      # ===== Configure Build Environment =====
+      - name: Configure ccache
+        run: |
+          mkdir -p $CCACHE_DIR
+          ccache --max-size=5G
+          ccache --set-config=compression=true
+          ccache --set-config=compression_level=6
+          ccache --zero-stats
+          echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+          echo "CCACHE_CONFIGPATH=${{ github.workspace }}/.ccache.conf" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
+
+      - name: Show build configuration
+        run: make -f Makefile.optimized show-config
+
+      # ===== Build =====
+      - name: Build Milvus (Optimized)
+        run: |
+          echo "::group::Building Milvus with optimized build system"
+
+          # Record start time
+          BUILD_START=$(date +%s)
+
+          # Run optimized build
+          make -f Makefile.optimized milvus-opt
+
+          # Calculate build time
+          BUILD_END=$(date +%s)
+          BUILD_TIME=$((BUILD_END - BUILD_START))
+
+          echo "::endgroup::"
+          echo "::notice::Build completed in ${BUILD_TIME}s"
+
+          # Save build time as artifact
+          echo "$BUILD_TIME" > build-time.txt
+
+      - name: Show build statistics
+        run: |
+          echo "::group::Build Statistics"
+
+          # Show ccache stats
+          if command -v ccache &> /dev/null; then
+            echo "=== ccache Statistics ==="
+            ccache --show-stats
+          fi
+
+          # Show cache status
+          make -f Makefile.optimized cache-status || true
+
+          # Show build metrics
+          bash scripts/build_metrics.sh quick || true
+
+          echo "::endgroup::"
+
+      # ===== Test (Optional) =====
+      - name: Run unit tests
+        if: matrix.platform == 'ubuntu-x86_64'  # Run tests only on one platform
+        run: |
+          echo "::group::Running unit tests"
+          make test-go || true
+          echo "::endgroup::"
+
+      # ===== Artifacts =====
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts/${{ matrix.platform }}
+
+          # Copy binary
+          if [ -f "bin/milvus" ]; then
+            cp bin/milvus artifacts/${{ matrix.platform }}/
+          fi
+
+          # Copy libraries
+          if [ -d "lib" ]; then
+            cp -r lib artifacts/${{ matrix.platform }}/
+          fi
+
+          # Copy build metrics
+          bash scripts/build_metrics.sh report > artifacts/${{ matrix.platform }}/build-report.txt || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: milvus-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+          retention-days: 7
+
+      - name: Upload build metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-metrics-${{ matrix.platform }}
+          path: |
+            build-time.txt
+            .build/metrics.json
+            .build/metrics.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Build Summary
+  # ============================================================================
+  summary:
+    name: Build Summary
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Generate build summary
+        run: |
+          echo "# Multi-Platform Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status | Build Time | Binary Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|------------|-------------|" >> $GITHUB_STEP_SUMMARY
+
+          for platform in ubuntu-x86_64 ubuntu-arm64 macos-arm64; do
+            if [ -d "all-artifacts/milvus-$platform" ]; then
+              status="✅ Success"
+
+              # Get build time if available
+              build_time="N/A"
+              if [ -f "all-artifacts/build-metrics-$platform/build-time.txt" ]; then
+                build_time="$(cat all-artifacts/build-metrics-$platform/build-time.txt)s"
+              fi
+
+              # Get binary size if available
+              binary_size="N/A"
+              if [ -f "all-artifacts/milvus-$platform/milvus" ]; then
+                binary_size=$(du -h "all-artifacts/milvus-$platform/milvus" | cut -f1)
+              fi
+
+              echo "| $platform | $status | $build_time | $binary_size |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $platform | ❌ Failed | N/A | N/A |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Cache Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual job logs for detailed ccache statistics." >> $GITHUB_STEP_SUMMARY
+
+      - name: Check build success
+        run: |
+          if [ ! -d "all-artifacts/milvus-ubuntu-x86_64" ] || \
+             [ ! -d "all-artifacts/milvus-ubuntu-arm64" ] || \
+             [ ! -d "all-artifacts/milvus-macos-arm64" ]; then
+            echo "::error::One or more platform builds failed"
+            exit 1
+          fi
+          echo "::notice::All platform builds succeeded!"

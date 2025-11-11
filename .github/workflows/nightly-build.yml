@@ -1,0 +1,171 @@
+name: Nightly Build & Cache Warmup
+
+on:
+  schedule:
+    # Run every day at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CONAN_USER_HOME: ${{ github.workspace }}/.conan
+  GO111MODULE: on
+
+jobs:
+  nightly-build:
+    name: Nightly Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-x86_64
+            os: ubuntu-22.04
+          - platform: ubuntu-arm64
+            os: ubuntu-22.04-arm
+          - platform: macos-arm64
+            os: macos-14
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-build-env
+        if: false  # Inline setup for now
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build ccache build-essential
+          pip3 install conan==1.64.1
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja ccache
+          pip3 install conan==1.64.1
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.89
+          profile: minimal
+
+      # Force fresh build (no cache restore)
+      - name: Configure ccache (fresh)
+        run: |
+          mkdir -p $CCACHE_DIR
+          ccache --max-size=10G
+          ccache --set-config=compression=true
+          ccache --clear
+
+      - name: Full clean build
+        run: |
+          echo "::group::Full Clean Build"
+
+          # Clean everything
+          make -f Makefile.optimized clean-hard
+
+          # Record start time
+          BUILD_START=$(date +%s)
+
+          # Build from scratch
+          make -f Makefile.optimized milvus-opt
+
+          # Calculate build time
+          BUILD_END=$(date +%s)
+          BUILD_TIME=$((BUILD_END - BUILD_START))
+
+          echo "::endgroup::"
+          echo "::notice::Clean build completed in ${BUILD_TIME}s"
+          echo "$BUILD_TIME" > nightly-build-time.txt
+
+      - name: Build statistics
+        run: |
+          echo "::group::Build Statistics"
+          ccache --show-stats
+          bash scripts/build_metrics.sh report
+          echo "::endgroup::"
+
+      # Save fresh cache for next builds
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-nightly-${{ matrix.platform }}-${{ github.run_id }}
+
+      - name: Save Conan cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.CONAN_USER_HOME }}
+            ~/.conan/data
+          key: conan-nightly-${{ matrix.platform }}-${{ github.run_id }}
+
+      - name: Upload build metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-metrics-${{ matrix.platform }}
+          path: |
+            nightly-build-time.txt
+            .build/metrics.json
+          retention-days: 30
+
+  # Performance benchmark
+  benchmark:
+    name: Performance Benchmark
+    needs: nightly-build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all metrics
+        uses: actions/download-artifact@v4
+        with:
+          path: metrics
+
+      - name: Generate performance report
+        run: |
+          echo "# Nightly Build Performance Report" > report.md
+          echo "" >> report.md
+          echo "**Date**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> report.md
+          echo "" >> report.md
+          echo "| Platform | Build Time | Status |" >> report.md
+          echo "|----------|------------|--------|" >> report.md
+
+          for platform in ubuntu-x86_64 ubuntu-arm64 macos-arm64; do
+            if [ -f "metrics/nightly-metrics-$platform/nightly-build-time.txt" ]; then
+              time=$(cat "metrics/nightly-metrics-$platform/nightly-build-time.txt")
+              mins=$((time / 60))
+              secs=$((time % 60))
+              echo "| $platform | ${mins}m ${secs}s | ✅ |" >> report.md
+            else
+              echo "| $platform | N/A | ❌ |" >> report.md
+            fi
+          done
+
+          cat report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: report.md
+          retention-days: 90
