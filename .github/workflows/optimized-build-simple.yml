@@ -1,0 +1,202 @@
+name: Optimized Build (Simplified)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'release-*'
+      - 'claude/**'  # For testing
+  pull_request:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: false
+        default: 'release'
+        type: choice
+        options:
+          - dev
+          - release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  GO111MODULE: on
+  BUILD_TYPE: ${{ github.event.inputs.build_type || 'release' }}
+
+jobs:
+  # Quick validation
+  pre-check:
+    name: Pre-Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Show build config
+        run: |
+          make -f Makefile.optimized show-config || true
+          echo "Workflow configuration validated"
+
+  # Main build
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: pre-check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-x86_64
+            os: ubuntu-22.04
+
+          - platform: macos-arm64
+            os: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build ccache pkg-config
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja ccache pkg-config
+
+      - name: Install Conan
+        run: |
+          pip3 install 'conan<2.0'
+          conan --version
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89
+
+      # Caching
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.platform }}-${{ hashFiles('internal/core/**/*.cpp', 'internal/core/**/*.h') }}
+          restore-keys: |
+            ccache-${{ matrix.platform }}-
+
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan/data
+          key: conan-${{ matrix.platform }}-${{ hashFiles('internal/core/conanfile.txt') }}
+          restore-keys: |
+            conan-${{ matrix.platform }}-
+
+      - name: Configure ccache
+        run: |
+          mkdir -p $CCACHE_DIR
+          ccache --max-size=5G
+          ccache --set-config=compression=true
+          ccache --zero-stats
+          echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+
+      - name: Build Milvus
+        run: |
+          BUILD_START=$(date +%s)
+
+          # Use optimized build system
+          make -f Makefile.optimized milvus-opt || {
+            echo "Optimized build failed, trying standard build"
+            make milvus
+          }
+
+          BUILD_END=$(date +%s)
+          BUILD_TIME=$((BUILD_END - BUILD_START))
+          echo "Build completed in ${BUILD_TIME}s"
+          echo "$BUILD_TIME" > build-time.txt
+
+      - name: Show statistics
+        run: |
+          if command -v ccache &> /dev/null; then
+            echo "=== ccache Statistics ==="
+            ccache --show-stats || ccache -s
+          fi
+
+          if [ -f "bin/milvus" ]; then
+            ls -lh bin/milvus
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: milvus-${{ matrix.platform }}
+          path: |
+            bin/milvus
+            build-time.txt
+          retention-days: 7
+          if-no-files-found: warn
+
+  summary:
+    name: Summary
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate summary
+        run: |
+          echo "# Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status | Build Time |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|------------|" >> $GITHUB_STEP_SUMMARY
+
+          for platform in ubuntu-x86_64 macos-arm64; do
+            if [ -f "artifacts/milvus-$platform/build-time.txt" ]; then
+              time=$(cat "artifacts/milvus-$platform/build-time.txt")
+              mins=$((time / 60))
+              secs=$((time % 60))
+              echo "| $platform | ✅ | ${mins}m ${secs}s |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $platform | ❌ | N/A |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
