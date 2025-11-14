@@ -17,7 +17,18 @@ pub extern "C" fn tantivy_load_index(
     load_in_mmap: bool,
     set_bitset: SetBitsetFn,
 ) -> RustResult {
-    assert!(tantivy_index_exist(path));
+    // Check if index exists and return error instead of panicking
+    // This prevents FFI boundary panic which cannot unwind properly
+    if !tantivy_index_exist(path) {
+        let path_str = unsafe {
+            match CStr::from_ptr(path).to_str() {
+                Ok(s) => s,
+                Err(_) => "<invalid utf8 path>",
+            }
+        };
+        return RustResult::from_error(format!("Tantivy index does not exist at path: {}", path_str));
+    }
+
     let path_str = cstr_to_str!(path);
     match IndexReaderWrapper::load(path_str, load_in_mmap, set_bitset) {
         Ok(w) => RustResult::from_ptr(create_binding(w)),
