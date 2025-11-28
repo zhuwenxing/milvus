@@ -130,7 +130,7 @@ class TestMilvusClientPartialUpdateValid(TestMilvusClientV2Base):
                                consistency_level="Strong", index_params=index_params)
         
         # step 2: insert data
-        rows = cf.gen_row_data_by_schema(nb=default_nb, schema=schema)
+        rows = cf.gen_row_data_by_schema(nb=1, schema=schema)
         self.upsert(client, collection_name, rows, partial_update=True)
         
         # step 3: partial update data
