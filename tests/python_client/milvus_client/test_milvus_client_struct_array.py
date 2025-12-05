@@ -1864,8 +1864,7 @@ class TestMilvusClientStructArraySearch(TestMilvusClientV2Base):
             assert hit is not None
 
     @pytest.mark.tags(CaseLabel.L1)
-    @pytest.mark.parametrize("retrieval_ann_ratio", [0.1, 1.0, 3.0, 5.0])
-    def test_search_recall_with_maxsim_ground_truth(self, retrieval_ann_ratio):
+    def test_search_recall_with_maxsim_ground_truth(self):
         """
         target: test search recall by comparing with MaxSim ground truth
         method: calculate brute-force MaxSim similarity as ground truth,
@@ -1925,8 +1924,7 @@ class TestMilvusClientStructArraySearch(TestMilvusClientV2Base):
         )
 
         # Create collection
-        res, check = self.create_collection(client, collection_name, schema=schema)
-        assert check
+        self.create_collection(client, collection_name, schema=schema)
 
         # Generate and insert data in batches, storing embeddings for ground truth
         doc_embeddings = {}  # id -> numpy array of embeddings (for ground truth)
@@ -1958,8 +1956,7 @@ class TestMilvusClientStructArraySearch(TestMilvusClientV2Base):
                 data.append(row)
                 doc_embeddings[i] = np.array(embeddings_list)
 
-            res, check = self.insert(client, collection_name, data)
-            assert check
+            self.insert(client, collection_name, data)
             log.info(f"Inserted batch {batch_start//batch_size + 1}/{(nb + batch_size - 1)//batch_size}")
 
         # Create indexes
@@ -1978,12 +1975,10 @@ class TestMilvusClientStructArraySearch(TestMilvusClientV2Base):
             params=INDEX_PARAMS,
         )
 
-        res, check = self.create_index(client, collection_name, index_params)
-        assert check
+        self.create_index(client, collection_name, index_params)
 
         # Load collection
-        res, check = self.load_collection(client, collection_name)
-        assert check
+        self.load_collection(client, collection_name)
 
         # Generate query vectors
         log.info(f"Generating {num_query_vectors} query vectors...")
@@ -2015,63 +2010,85 @@ class TestMilvusClientStructArraySearch(TestMilvusClientV2Base):
         for vec in query_vectors:
             search_tensor.add(vec.tolist())
 
-        # Search with retrieval_ann_ratio parameter
-        results, check = self.search(
-            client,
-            collection_name,
-            data=[search_tensor],
-            anns_field="clips[clip_embedding1]",
-            search_params={
-                "metric_type": "MAX_SIM_COSINE",
-                "params": {"retrieval_ann_ratio": retrieval_ann_ratio}
-            },
-            limit=limit,
-        )
-        assert check
-        assert len(results[0]) > 0
-
-        # Get Milvus search result IDs
-        milvus_result_ids = set([hit["id"] for hit in results[0]])
-
-        # Calculate recall: intersection of ground truth and Milvus results
-        recall_hits = len(ground_truth_ids.intersection(milvus_result_ids))
-        recall = recall_hits / len(ground_truth_ids)
-
-        log.info(f"retrieval_ann_ratio={retrieval_ann_ratio}, recall={recall:.4f}, "
-                 f"recall_hits={recall_hits}/{limit}")
+        # Log ground truth top-10 with scores (only once)
         log.info(f"Ground truth top-{limit} IDs: {sorted(ground_truth_ids)}")
-        log.info(f"Milvus result IDs: {sorted(milvus_result_ids)}")
-
-        # Log ground truth top-10 with scores
         log.info(f"Ground truth top-{limit} with scores:")
         for i, (doc_id, score) in enumerate(ground_truth_scores[:limit]):
             num_patches = len(doc_embeddings[doc_id])
             log.info(f"  GT rank {i+1}: id={doc_id}, score={score:.6f}, num_patches={num_patches}")
 
-        # Log detailed comparison for Milvus results
-        log.info(f"Milvus results with ground truth comparison:")
-        gt_ranks_for_milvus = []
-        for i, hit in enumerate(results[0][:limit]):
-            gt_score = next((s for doc_id, s in ground_truth_scores if doc_id == hit["id"]), None)
-            gt_rank = next((idx+1 for idx, (doc_id, s) in enumerate(ground_truth_scores) if doc_id == hit["id"]), None)
-            gt_ranks_for_milvus.append(gt_rank)
-            log.info(f"  Milvus rank {i+1}: id={hit['id']}, distance={hit['distance']:.6f}, "
-                     f"gt_score={gt_score:.6f}, gt_rank={gt_rank}")
+        # Search with different retrieval_ann_ratio values
+        retrieval_ann_ratios = [0.1, 1.0, 3.0, 5.0]
+        recall_results = {}  # Track recall for each ratio
+        for retrieval_ann_ratio in retrieval_ann_ratios:
+            log.info(f"\n{'='*50}")
+            log.info(f"Testing retrieval_ann_ratio={retrieval_ann_ratio}")
 
-        # Calculate recall at different K values
-        for k in [1,5,10]:
-            gt_top_k = set([item[0] for item in ground_truth_scores[:k]])
-            recall_at_k = len(gt_top_k.intersection(milvus_result_ids)) / min(k, limit)
-            log.info(f"Recall@{k}: {recall_at_k:.4f}")
+            results, _ = self.search(
+                client,
+                collection_name,
+                data=[search_tensor],
+                anns_field="clips[clip_embedding1]",
+                search_params={
+                    "metric_type": "MAX_SIM_COSINE",
+                    "params": {"retrieval_ann_ratio": retrieval_ann_ratio}
+                },
+                limit=limit,
+            )
+            assert len(results[0]) > 0
 
-        # Calculate average ground truth rank for Milvus results
-        avg_gt_rank = sum(gt_ranks_for_milvus) / len(gt_ranks_for_milvus)
-        log.info(f"Average GT rank for Milvus top-{limit}: {avg_gt_rank:.1f}")
+            # Get Milvus search result IDs
+            milvus_result_ids = set([hit["id"] for hit in results[0]])
 
-        # Verify results
-        assert recall >= 0, f"Recall should be non-negative, got {recall}"
-        # Higher ratio should generally improve recall, but we just verify basic functionality
-        assert len(results[0]) == limit, f"Expected {limit} results, got {len(results[0])}"
+            # Calculate recall: intersection of ground truth and Milvus results
+            recall_hits = len(ground_truth_ids.intersection(milvus_result_ids))
+            recall = recall_hits / len(ground_truth_ids)
+            recall_results[retrieval_ann_ratio] = recall
+
+            log.info(f"retrieval_ann_ratio={retrieval_ann_ratio}, recall={recall:.4f}, "
+                     f"recall_hits={recall_hits}/{limit}")
+            log.info(f"Milvus result IDs: {sorted(milvus_result_ids)}")
+
+            # Log detailed comparison for Milvus results
+            log.info(f"Milvus results with ground truth comparison:")
+            gt_ranks_for_milvus = []
+            for i, hit in enumerate(results[0][:limit]):
+                gt_score = next((s for doc_id, s in ground_truth_scores if doc_id == hit["id"]), None)
+                gt_rank = next((idx+1 for idx, (doc_id, _) in enumerate(ground_truth_scores) if doc_id == hit["id"]), None)
+                gt_ranks_for_milvus.append(gt_rank)
+                log.info(f"  Milvus rank {i+1}: id={hit['id']}, distance={hit['distance']:.6f}, "
+                         f"gt_score={gt_score:.6f}, gt_rank={gt_rank}")
+
+            # Calculate recall at different K values
+            for k in [1, 5, 10]:
+                gt_top_k = set([item[0] for item in ground_truth_scores[:k]])
+                recall_at_k = len(gt_top_k.intersection(milvus_result_ids)) / min(k, limit)
+                log.info(f"Recall@{k}: {recall_at_k:.4f}")
+
+            # Calculate average ground truth rank for Milvus results
+            avg_gt_rank = sum(gt_ranks_for_milvus) / len(gt_ranks_for_milvus)
+            log.info(f"Average GT rank for Milvus top-{limit}: {avg_gt_rank:.1f}")
+
+            # Verify results
+            assert recall >= 0, f"Recall should be non-negative, got {recall}"
+            assert len(results[0]) == limit, f"Expected {limit} results, got {len(results[0])}"
+
+        # Verify that higher retrieval_ann_ratio leads to higher or equal recall
+        log.info(f"\nRecall results summary: {recall_results}")
+        for i in range(len(retrieval_ann_ratios) - 1):
+            ratio_curr = retrieval_ann_ratios[i]
+            ratio_next = retrieval_ann_ratios[i + 1]
+            assert recall_results[ratio_next] >= recall_results[ratio_curr], \
+                f"Recall should increase with higher retrieval_ann_ratio: " \
+                f"ratio {ratio_curr} has recall {recall_results[ratio_curr]}, " \
+                f"but ratio {ratio_next} has recall {recall_results[ratio_next]}"
+
+        # Verify that recall >= 0.8 when retrieval_ann_ratio >= 3
+        for ratio, recall in recall_results.items():
+            if ratio >= 3:
+                assert recall >= 0.8, \
+                    f"Recall should be >= 0.8 when retrieval_ann_ratio >= 3, " \
+                    f"but ratio {ratio} has recall {recall}"
 
 
 class TestMilvusClientStructArrayHybridSearch(TestMilvusClientV2Base):
