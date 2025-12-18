@@ -1,0 +1,21 @@
+kind: IOChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-minio-io-fault
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      app: minio
+      release: milvus-chaos
+  mode: all
+  action: fault
+  errno: 5
+  methods:
+    - write
+    - fsync
+  percent: 10
+  volumePath: /export/
+  duration: 5m

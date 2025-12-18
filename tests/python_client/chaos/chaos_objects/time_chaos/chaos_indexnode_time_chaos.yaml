@@ -1,0 +1,17 @@
+kind: TimeChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-indexnode-time-chaos
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      app.kubernetes.io/instance: milvus-chaos
+      component: indexnode
+  mode: all
+  duration: 5m
+  timeOffset: "-5m"
+  clockIds:
+    - CLOCK_REALTIME

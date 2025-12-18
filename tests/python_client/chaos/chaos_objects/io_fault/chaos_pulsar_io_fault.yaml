@@ -1,0 +1,21 @@
+kind: IOChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-pulsar-io-fault
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      component: bookkeeper
+      release: milvus-chaos
+  mode: all
+  action: fault
+  errno: 5
+  methods:
+    - write
+    - fsync
+  percent: 10
+  volumePath: /pulsar/data/bookkeeper/ledgers
+  duration: 5m

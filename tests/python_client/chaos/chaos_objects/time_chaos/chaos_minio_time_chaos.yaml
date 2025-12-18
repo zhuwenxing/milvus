@@ -1,0 +1,17 @@
+kind: TimeChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-minio-time-chaos
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      app: minio
+      release: milvus-chaos
+  mode: all
+  duration: 5m
+  timeOffset: "-5m"
+  clockIds:
+    - CLOCK_REALTIME

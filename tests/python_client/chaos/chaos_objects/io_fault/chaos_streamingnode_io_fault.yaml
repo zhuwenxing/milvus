@@ -1,0 +1,21 @@
+kind: IOChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-streamingnode-io-fault
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      app.kubernetes.io/instance: milvus-chaos
+      component: streamingnode
+  mode: all
+  action: fault
+  errno: 5
+  methods:
+    - read
+    - write
+  percent: 10
+  volumePath: /milvus/tools
+  duration: 5m

@@ -1,15 +1,15 @@
 kind: StressChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
-  name: test-etcd-memory-stress
+  name: test-pulsar-memory-stress
   namespace: chaos-testing
 spec:
   selector:
     namespaces:
       - chaos-testing
     labelSelectors:
-      app.kubernetes.io/name: etcd
-      app.kubernetes.io/instance: milvus-chaos-etcd
+      app: pulsar
+      release: milvus-chaos
   mode: one
   duration: 5m
   stressors:

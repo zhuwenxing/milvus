@@ -1,0 +1,26 @@
+kind: NetworkChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-minio-network-loss
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      app: minio
+      release: milvus-chaos
+  mode: all
+  action: loss
+  loss:
+    loss: "25"
+    correlation: "50"
+  duration: 5m
+  direction: both
+  target:
+    selector:
+      namespaces:
+        - chaos-testing
+      labelSelectors:
+        app.kubernetes.io/instance: milvus-chaos
+    mode: all

@@ -1,0 +1,21 @@
+kind: IOChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: test-kafka-io-fault
+  namespace: chaos-testing
+spec:
+  selector:
+    namespaces:
+      - chaos-testing
+    labelSelectors:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/instance: milvus-chaos-kafka
+  mode: all
+  action: fault
+  errno: 5
+  methods:
+    - write
+    - fsync
+  percent: 10
+  volumePath: /bitnami/kafka/data
+  duration: 5m

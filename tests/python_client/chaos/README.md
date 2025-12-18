@@ -86,15 +86,32 @@ Run test scenario automatically:
 ### Nightly 
 still in planning 
 
-### Todo
-- [ ] network attack
-- [ ] clock skew
-- [ ] IO injection
+### Supported Chaos Types
+
+| Chaos Type | Description | Directory |
+|------------|-------------|-----------|
+| pod_kill | Kill pod periodically | pod_kill/ |
+| pod_failure | Make pod unavailable | pod_failure/ |
+| container_kill | Kill container in pod | container_kill/ |
+| network_partition | Network isolation between pods | network_partition/ |
+| network_latency | Add network delay | network_latency/ |
+| network_bandwidth | Limit network bandwidth | network_bandwidth/ |
+| network_loss | Packet loss | network_loss/ |
+| network_duplicate | Packet duplication | network_duplicate/ |
+| network_corrupt | Packet corruption | network_corrupt/ |
+| io_latency | Add IO delay | io_latency/ |
+| io_fault | Inject IO errors | io_fault/ |
+| memory_stress | Memory pressure | memory_stress/ |
+| cpu_stress | CPU pressure | cpu_stress/ |
+| time_chaos | Clock skew | time_chaos/ |
+
+### Supported Components
+- **Milvus**: datanode, querynode, indexnode, proxy, mixcoord, standalone, streamingnode
+- **Dependencies**: etcd, minio, pulsar, kafka
 
 ## How to contribute
 * Get familiar with chaos engineering and [Chaos Mesh](https://chaos-mesh.org)
-* Design chaos scenarios, preferring to pick from todo list
+* Design chaos scenarios based on supported chaos types above
 * Generate yaml file for your chaos scenarios. You can create a chaos experiment in chaos-dashboard, then download the yaml file of it.
 * Add yaml file to chaos_objects dir and rename it as `chaos_${component_name}_${chaos_type}.yaml`. Make sure `kubectl apply -f ${your_chaos_yaml_file}` can take effect
-* Add testcase in `testcases.yaml`. You should figure out the expectation of milvus during the chaos
-* Run your added testcase according to `Manually` above and check whether it as your expectation 
+* Run your added testcase according to `Manually` above and check whether it works as expected 

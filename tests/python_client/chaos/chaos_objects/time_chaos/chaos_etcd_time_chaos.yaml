@@ -1,7 +1,7 @@
-kind: StressChaos
+kind: TimeChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
-  name: test-etcd-memory-stress
+  name: test-etcd-time-chaos
   namespace: chaos-testing
 spec:
   selector:
@@ -10,9 +10,8 @@ spec:
     labelSelectors:
       app.kubernetes.io/name: etcd
       app.kubernetes.io/instance: milvus-chaos-etcd
-  mode: one
+  mode: all
   duration: 5m
-  stressors:
-    memory:
-      workers: 4
-      size: 512Mi
+  timeOffset: "-5m"
+  clockIds:
+    - CLOCK_REALTIME
