@@ -9,9 +9,10 @@ spec:
       - chaos-testing
     labelSelectors:
       app.kubernetes.io/name: milvus
-      app.kubernetes.io/instance: mic-memory
-      app.kubernetes.io/component: datanode
+      app.kubernetes.io/instance: milvus-chaos
+      component: datanode
   mode: one
+  duration: 5m
   stressors:
     memory:
       workers: 4

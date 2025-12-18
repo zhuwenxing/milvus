@@ -1,7 +1,7 @@
 kind: StressChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
-  name: test-querynode-memory-stress
+  name: test-mixcoord-memory-stress
   namespace: chaos-testing
 spec:
   selector:
@@ -10,7 +10,7 @@ spec:
     labelSelectors:
       app.kubernetes.io/name: milvus
       app.kubernetes.io/instance: milvus-chaos
-      component: querynode
+      component: mixcoord
   mode: one
   duration: 5m
   stressors:

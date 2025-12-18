@@ -1,22 +1,22 @@
 kind: IOChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
-  name: test-etcd-io-latency
+  name: test-streamingnode-io-latency
   namespace: chaos-testing
 spec:
   selector:
     namespaces:
       - chaos-testing
     labelSelectors:
-      app.kubernetes.io/name: etcd
       app.kubernetes.io/instance: milvus-chaos
+      component: streamingnode
   mode: all
   action: latency
-  delay: 10ms
+  delay: 100ms
   methods:
     - read
     - write
     - flush
-  percent: 100
-  volumePath: /bitnami/etcd
+  percent: 50
+  volumePath: /milvus/tools
   duration: 5m

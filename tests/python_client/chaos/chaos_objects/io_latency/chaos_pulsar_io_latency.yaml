@@ -19,3 +19,4 @@ spec:
     - flush
   percent: 100
   volumePath: /pulsar/data/bookkeeper/ledgers
+  duration: 5m

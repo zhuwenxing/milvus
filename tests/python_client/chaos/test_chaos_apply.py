@@ -9,9 +9,81 @@ from common.cus_resource_opts import CustomResourceOperations as CusResource
 from common.milvus_sys import MilvusSys
 from utils.util_log import test_log as log
 from datetime import datetime
-from utils.util_k8s import wait_pods_ready, get_milvus_instance_name, get_milvus_deploy_tool
+from utils.util_k8s import wait_pods_ready, get_milvus_instance_name, get_milvus_deploy_tool, get_pod_list
 from utils.util_common import update_key_value, update_key_name, gen_experiment_config, wait_signal_to_apply_chaos
 import constants
+
+
+def get_selector_from_chaos_config(chaos_config):
+    """
+    Extract selector from chaos config for different chaos types
+    """
+    kind = chaos_config.get('kind', '')
+    spec = chaos_config.get('spec', {})
+
+    # For Schedule type, selector is nested under podChaos/ioChaos/etc
+    if kind == 'Schedule':
+        chaos_type = spec.get('type', '').lower()
+        type_mapping = {
+            'podchaos': 'podChaos',
+            'iochaos': 'ioChaos',
+            'networkchaos': 'networkChaos',
+            'stresschaos': 'stressChaos',
+            'timechaos': 'timeChaos'
+        }
+        nested_key = type_mapping.get(chaos_type, chaos_type)
+        nested_spec = spec.get(nested_key, {})
+        return nested_spec.get('selector', {})
+    else:
+        # For direct chaos types (PodChaos, IOChaos, NetworkChaos, etc.)
+        return spec.get('selector', {})
+
+
+def build_label_selector_string(selector):
+    """
+    Build label selector string from selector dict
+    """
+    label_selectors = selector.get('labelSelectors', {})
+    if not label_selectors:
+        return ""
+
+    label_parts = []
+    for key, value in label_selectors.items():
+        label_parts.append(f"{key}={value}")
+
+    return ", ".join(label_parts)
+
+
+def verify_chaos_selector_matches_pods(chaos_config, namespace):
+    """
+    Verify that the chaos selector can match at least one pod
+    Returns: (matched, pod_names)
+    """
+    selector = get_selector_from_chaos_config(chaos_config)
+    if not selector:
+        log.warning("No selector found in chaos config")
+        return False, []
+
+    label_selector_str = build_label_selector_string(selector)
+    if not label_selector_str:
+        log.warning("No label selectors found in chaos config")
+        return False, []
+
+    log.info(f"Verifying chaos selector: namespace={namespace}, labels={label_selector_str}")
+
+    try:
+        pods = get_pod_list(namespace, label_selector_str)
+        pod_names = [pod.metadata.name for pod in pods]
+
+        if len(pod_names) > 0:
+            log.info(f"Chaos selector matches {len(pod_names)} pod(s): {pod_names}")
+            return True, pod_names
+        else:
+            log.error(f"Chaos selector matches NO pods! selector: {label_selector_str}")
+            return False, []
+    except Exception as e:
+        log.error(f"Failed to verify chaos selector: {e}")
+        return False, []
 
 
 class TestChaosApply:
@@ -90,6 +162,14 @@ class TestChaosApply:
             update_key_name(chaos_config, "component", "app.kubernetes.io/component")
         self._chaos_config = chaos_config  # cache the chaos config for tear down
         log.info(f"chaos_config: {chaos_config}")
+
+        # verify chaos selector can match pods before applying
+        matched, matched_pods = verify_chaos_selector_matches_pods(chaos_config, self.milvus_ns)
+        if not matched:
+            raise Exception(f"Chaos selector cannot match any pods in namespace {self.milvus_ns}. "
+                           f"Please check the label selectors in chaos config.")
+        log.info(f"Chaos selector verification passed, will affect pods: {matched_pods}")
+
         # apply chaos object
         chaos_res = CusResource(kind=chaos_config['kind'],
                                 group=constants.CHAOS_GROUP,

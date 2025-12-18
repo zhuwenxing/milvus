@@ -1,7 +1,7 @@
 kind: StressChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
-  name: test-querynode-memory-stress
+  name: test-querynode-cpu-stress
   namespace: chaos-testing
 spec:
   selector:
@@ -14,6 +14,6 @@ spec:
   mode: one
   duration: 5m
   stressors:
-    memory:
-      workers: 4
-      size: 512Mi
+    cpu:
+      workers: 2
+      load: 80

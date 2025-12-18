@@ -1,7 +1,7 @@
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
-  name: test-minio-network-partition
+  name: test-streamingnode-network-partition
   namespace: chaos-testing
 spec:
   action: partition
@@ -10,8 +10,8 @@ spec:
     namespaces:
       - chaos-testing
     labelSelectors:
-      release: milvus-chaos
-      app: minio
+      app.kubernetes.io/instance: milvus-chaos
+      component: streamingnode
   duration: 5m
   direction: both
   target:

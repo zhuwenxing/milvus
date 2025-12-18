@@ -19,3 +19,4 @@ spec:
     - flush
   percent: 100
   volumePath: /export/
+  duration: 5m

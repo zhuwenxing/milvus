@@ -1,19 +1,22 @@
-kind: StressChaos
+kind: IOChaos
 apiVersion: chaos-mesh.org/v1alpha1
 metadata:
-  name: test-querynode-memory-stress
+  name: test-proxy-io-latency
   namespace: chaos-testing
 spec:
   selector:
     namespaces:
       - chaos-testing
     labelSelectors:
-      app.kubernetes.io/name: milvus
       app.kubernetes.io/instance: milvus-chaos
-      component: querynode
-  mode: one
+      component: proxy
+  mode: all
+  action: latency
+  delay: 100ms
+  methods:
+    - read
+    - write
+    - flush
+  percent: 50
+  volumePath: /milvus/tools
   duration: 5m
-  stressors:
-    memory:
-      workers: 4
-      size: 512Mi

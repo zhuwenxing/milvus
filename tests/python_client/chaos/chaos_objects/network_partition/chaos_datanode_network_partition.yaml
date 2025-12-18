@@ -10,8 +10,8 @@ spec:
     namespaces:
       - chaos-testing
     labelSelectors:
-      app.kubernetes.io/instance: chaos-testing
-      app.kubernetes.io/name: milvus
+      app.kubernetes.io/instance: milvus-chaos
+      component: datanode
   duration: 5m
   direction: both
   target:
@@ -19,7 +19,5 @@ spec:
       namespaces:
         - chaos-testing
       labelSelectors:
-        app.kubernetes.io/instance: chaos-testing
-        app.kubernetes.io/name: milvus
-        component: datanode
-    mode: one
+        app.kubernetes.io/instance: milvus-chaos
+    mode: all
