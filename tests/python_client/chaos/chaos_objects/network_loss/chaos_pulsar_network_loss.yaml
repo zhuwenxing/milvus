@@ -8,7 +8,7 @@ spec:
     namespaces:
       - chaos-testing
     labelSelectors:
-      app: pulsar
+      app: pulsarv3
       release: milvus-chaos
   mode: all
   action: loss

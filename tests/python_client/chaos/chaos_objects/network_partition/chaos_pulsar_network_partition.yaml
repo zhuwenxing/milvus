@@ -11,7 +11,7 @@ spec:
       - chaos-testing
     labelSelectors:
       release: milvus-chaos
-      app: pulsar
+      app: pulsarv3
   duration: 5m
   direction: both
   target:

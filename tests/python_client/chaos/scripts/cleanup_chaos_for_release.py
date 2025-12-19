@@ -15,6 +15,8 @@ Usage:
 
 import argparse
 import os
+import sys
+import time
 from typing import List, Dict, Tuple
 
 from kubernetes import client, config
@@ -189,6 +191,107 @@ def delete_chaos_resource(namespace: str, kind_plural: str, name: str) -> bool:
         return False
 
 
+def remove_finalizers(namespace: str, kind_plural: str, name: str) -> bool:
+    """
+    Remove finalizers from a chaos resource to force deletion.
+    This is useful when IOChaos/NetworkChaos gets stuck due to chaos-mesh/records finalizer.
+
+    Args:
+        namespace: The Kubernetes namespace
+        kind_plural: The plural form of the chaos kind
+        name: The name of the resource
+
+    Returns:
+        True if successful, False otherwise
+    """
+    api_instance = client.CustomObjectsApi()
+    try:
+        api_instance.patch_namespaced_custom_object(
+            group=CHAOS_GROUP,
+            version=CHAOS_VERSION,
+            namespace=namespace,
+            plural=kind_plural,
+            name=name,
+            body={"metadata": {"finalizers": None}}
+        )
+        print(f"  Removed finalizers from {kind_plural}/{name}")
+        return True
+    except ApiException as e:
+        print(f"  Warning: Failed to remove finalizers from {kind_plural}/{name}: {e.reason}")
+        return False
+
+
+def force_delete_chaos_resource(namespace: str, kind_plural: str, name: str, timeout: int = 30) -> bool:
+    """
+    Force delete a chaos resource, removing finalizers if stuck in Terminating state.
+
+    Args:
+        namespace: The Kubernetes namespace
+        kind_plural: The plural form of the chaos kind
+        name: The name of the resource to delete
+        timeout: Timeout in seconds to wait for deletion
+
+    Returns:
+        True if deleted successfully, False otherwise
+    """
+    api_instance = client.CustomObjectsApi()
+
+    # First attempt normal delete
+    try:
+        api_instance.delete_namespaced_custom_object(
+            group=CHAOS_GROUP,
+            version=CHAOS_VERSION,
+            namespace=namespace,
+            plural=kind_plural,
+            name=name
+        )
+    except ApiException as e:
+        if e.status != 404:
+            print(f"  Warning: Initial delete failed for {kind_plural}/{name}: {e.reason}")
+
+    # Wait and check if resource is deleted, remove finalizers if stuck
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            resource = api_instance.get_namespaced_custom_object(
+                group=CHAOS_GROUP,
+                version=CHAOS_VERSION,
+                namespace=namespace,
+                plural=kind_plural,
+                name=name
+            )
+
+            # Check if resource is stuck in Terminating (has deletionTimestamp)
+            metadata = resource.get('metadata', {})
+            if metadata.get('deletionTimestamp'):
+                finalizers = metadata.get('finalizers', [])
+                if finalizers:
+                    print(f"  {kind_plural}/{name} stuck in Terminating with finalizers: {finalizers}")
+                    remove_finalizers(namespace, kind_plural, name)
+
+            time.sleep(2)
+        except ApiException as e:
+            if e.status == 404:
+                return True  # Successfully deleted
+            time.sleep(2)
+
+    # Final check
+    try:
+        api_instance.get_namespaced_custom_object(
+            group=CHAOS_GROUP,
+            version=CHAOS_VERSION,
+            namespace=namespace,
+            plural=kind_plural,
+            name=name
+        )
+        print(f"  Warning: {kind_plural}/{name} still exists after {timeout}s")
+        return False
+    except ApiException as e:
+        if e.status == 404:
+            return True
+        return False
+
+
 def find_chaos_for_release(namespace: str, release_name: str) -> List[Dict]:
     """
     Find all chaos resources targeting a specific release.
@@ -308,6 +411,12 @@ def main():
     )
 
     parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force delete by removing finalizers if resources are stuck in Terminating state (useful for IOChaos)'
+    )
+
+    parser.add_argument(
         '--list-all',
         action='store_true',
         help='List all chaos resources in the namespace'
@@ -357,19 +466,32 @@ def main():
                 print("Aborted.")
                 return
 
-        print(f"\nDeleting {len(resources)} chaos resource(s)...")
+        delete_mode = "force delete" if args.force else "delete"
+        print(f"\n{delete_mode.capitalize()}ing {len(resources)} chaos resource(s)...")
         success_count = 0
+
         for r in resources:
             print(f"  Deleting {r['kind']}/{r['name']}...", end=' ')
-            if delete_chaos_resource(r['namespace'], r['kind_plural'], r['name']):
-                print("OK")
-                success_count += 1
+
+            if args.force:
+                # Use force delete with finalizer removal for stuck resources
+                if force_delete_chaos_resource(r['namespace'], r['kind_plural'], r['name']):
+                    print("OK")
+                    success_count += 1
+                else:
+                    print("FAILED")
             else:
-                print("FAILED")
+                if delete_chaos_resource(r['namespace'], r['kind_plural'], r['name']):
+                    print("OK")
+                    success_count += 1
+                else:
+                    print("FAILED")
 
         print(f"\nDeleted {success_count}/{len(resources)} resource(s)")
+
     else:
         print("\nRun with --delete to remove these resources")
+        print("Run with --delete --force to force delete (removes finalizers)")
 
 
 if __name__ == '__main__':

@@ -26,7 +26,7 @@ class TestGetCollections(TestcaseBase):
             if prefix not in selected_collections_map:
                 selected_collections_map[prefix] = [c_name]
             else:
-                if len(selected_collections_map[prefix]) <= 5:
+                if len(selected_collections_map[prefix]) <= 2:
                     selected_collections_map[prefix].append(c_name)
 
         selected_collections = []

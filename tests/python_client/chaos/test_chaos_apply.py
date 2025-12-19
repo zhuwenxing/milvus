@@ -5,11 +5,13 @@ from time import sleep
 from pathlib import Path
 import json
 from pymilvus import connections
+from kubernetes import client
+from kubernetes.client.rest import ApiException
 from common.cus_resource_opts import CustomResourceOperations as CusResource
 from common.milvus_sys import MilvusSys
 from utils.util_log import test_log as log
 from datetime import datetime
-from utils.util_k8s import wait_pods_ready, get_milvus_instance_name, get_milvus_deploy_tool, get_pod_list
+from utils.util_k8s import wait_pods_ready, get_milvus_instance_name, get_milvus_deploy_tool, get_pod_list, init_k8s_client_config
 from utils.util_common import update_key_value, update_key_name, gen_experiment_config, wait_signal_to_apply_chaos
 import constants
 
@@ -86,6 +88,130 @@ def verify_chaos_selector_matches_pods(chaos_config, namespace):
         return False, []
 
 
+def cleanup_chaosfs_directories(pod_names, namespace, volume_path):
+    """
+    Cleanup residual __chaosfs__ directories in pods after IOChaos.
+    IOChaos creates __chaosfs__<dir>__ proxy directories via FUSE that may remain
+    after chaos cleanup failure.
+
+    Args:
+        pod_names: List of pod names to cleanup
+        namespace: The namespace where pods are running
+        volume_path: The volumePath from IOChaos config (e.g., /var/lib/milvus/data)
+
+    Returns:
+        (cleaned_count, pods_need_restart): Number of pods cleaned and list of pods that need restart
+    """
+    if not pod_names or not volume_path:
+        return 0, []
+
+    import os
+    from kubernetes.stream import stream
+
+    init_k8s_client_config()
+    core_v1 = client.CoreV1Api()
+    cleaned_count = 0
+    pods_need_restart = []
+
+    # Get parent directory of volumePath
+    # e.g., /var/lib/milvus/data -> /var/lib/milvus
+    parent_path = os.path.dirname(volume_path.rstrip('/'))
+    if not parent_path:
+        parent_path = '/'
+
+    for pod_name in pod_names:
+        try:
+            # First check if __chaosfs__ directories exist
+            check_cmd = [
+                '/bin/sh', '-c',
+                f'ls -d {parent_path}/__chaosfs__* 2>/dev/null || echo "none"'
+            ]
+            resp = stream(
+                core_v1.connect_get_namespaced_pod_exec,
+                pod_name,
+                namespace,
+                command=check_cmd,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False
+            )
+
+            if 'none' in resp or '__chaosfs__' not in resp:
+                # No residual directories
+                cleaned_count += 1
+                continue
+
+            log.warning(f"Found __chaosfs__ residual in pod {pod_name}: {resp.strip()}")
+
+            # Try to remove __chaosfs__ directories
+            cleanup_cmd = [
+                '/bin/sh', '-c',
+                f'rm -rf {parent_path}/__chaosfs__* 2>&1'
+            ]
+            resp = stream(
+                core_v1.connect_get_namespaced_pod_exec,
+                pod_name,
+                namespace,
+                command=cleanup_cmd,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False
+            )
+
+            # Check if removal failed (FUSE mount still active)
+            if 'Device or resource busy' in resp or 'cannot remove' in resp:
+                log.warning(f"Cannot remove __chaosfs__ in pod {pod_name} (FUSE mount busy), pod needs restart")
+                pods_need_restart.append(pod_name)
+            else:
+                log.info(f"Cleaned __chaosfs__ directories in pod {pod_name}")
+                cleaned_count += 1
+
+        except ApiException as e:
+            if e.status == 404:
+                log.warning(f"Pod {pod_name} not found, may have been restarted")
+                cleaned_count += 1  # Consider it cleaned
+            else:
+                log.warning(f"Failed to cleanup __chaosfs__ in pod {pod_name}: {e}")
+        except Exception as e:
+            log.warning(f"Failed to exec cleanup command in pod {pod_name}: {e}")
+
+    return cleaned_count, pods_need_restart
+
+
+def restart_pods(pod_names, namespace):
+    """
+    Restart pods by deleting them (StatefulSet/Deployment will recreate them).
+
+    Args:
+        pod_names: List of pod names to restart
+        namespace: The namespace where pods are running
+
+    Returns:
+        Number of pods successfully deleted
+    """
+    if not pod_names:
+        return 0
+
+    init_k8s_client_config()
+    core_v1 = client.CoreV1Api()
+    deleted_count = 0
+
+    for pod_name in pod_names:
+        try:
+            core_v1.delete_namespaced_pod(pod_name, namespace)
+            log.info(f"Restarted pod {pod_name} for IOChaos cleanup")
+            deleted_count += 1
+        except ApiException as e:
+            if e.status == 404:
+                log.warning(f"Pod {pod_name} not found")
+            else:
+                log.warning(f"Failed to restart pod {pod_name}: {e}")
+
+    return deleted_count
+
+
 class TestChaosApply:
 
     @pytest.fixture(scope="function", autouse=True)
@@ -123,7 +249,8 @@ class TestChaosApply:
                                 version=constants.CHAOS_VERSION,
                                 namespace=constants.CHAOS_NAMESPACE)
         meta_name = self.chaos_config.get('metadata', None).get('name', None)
-        chaos_res.delete(meta_name, raise_ex=False)
+        # Use force_delete to handle stuck chaos resources with finalizers
+        chaos_res.force_delete(meta_name, timeout=60)
         sleep(2)
 
     def test_chaos_apply(self, chaos_type, target_component, target_scope, target_number, chaos_duration, chaos_interval, wait_signal):
@@ -184,19 +311,29 @@ class TestChaosApply:
         res = chaos_res.get(meta_name)
         log.info(f"chaos inject result: {res['kind']}, {res['metadata']['name']}")
         sleep(chaos_duration)
-        # delete chaos
-        chaos_res.delete(meta_name)
+        # delete chaos (use force_delete to handle stuck resources with finalizers)
+        deleted = chaos_res.force_delete(meta_name, timeout=60)
         delete_time = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')
         log.info("chaos deleted")
-        res = chaos_res.list_all()
-        chaos_list = [r['metadata']['name'] for r in res['items']]
-        # verify the chaos is deleted in 60s
-        t0 = time.time()
-        while meta_name in chaos_list and time.time() - t0 < 60:
-            sleep(10)
-            res = chaos_res.list_all()
-            chaos_list = [r['metadata']['name'] for r in res['items']]
-        assert meta_name not in chaos_list
+        assert deleted, f"Failed to delete chaos {meta_name} within 60s"
+
+        # For IOChaos, cleanup residual __chaosfs__ directories in affected pods
+        if 'io' in chaos_type.lower():
+            volume_path = chaos_config.get('spec', {}).get('volumePath', '')
+            if volume_path:
+                # Re-fetch current pods by selector (pods may have restarted during chaos)
+                label_selector_str = build_label_selector_string(get_selector_from_chaos_config(chaos_config))
+                current_pods = get_pod_list(self.milvus_ns, label_selector_str)
+                current_pod_names = [pod.metadata.name for pod in current_pods]
+                log.info(f"IOChaos detected (type={chaos_type}), cleaning up __chaosfs__ residual in pods: {current_pod_names}")
+                cleaned_count, pods_need_restart = cleanup_chaosfs_directories(current_pod_names, self.milvus_ns, volume_path)
+                log.info(f"Cleaned __chaosfs__ directories in {cleaned_count} pod(s)")
+
+                # Restart pods that have FUSE mount stuck
+                if pods_need_restart:
+                    log.warning(f"Restarting {len(pods_need_restart)} pod(s) with stuck FUSE mount: {pods_need_restart}")
+                    restart_pods(pods_need_restart, self.milvus_ns)
+
         # wait all pods ready
         t0 = time.time()
         log.info(f"wait for pods in namespace {constants.CHAOS_NAMESPACE} with label app.kubernetes.io/instance={release_name}")

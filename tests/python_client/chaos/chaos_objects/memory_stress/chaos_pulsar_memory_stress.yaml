@@ -8,11 +8,11 @@ spec:
     namespaces:
       - chaos-testing
     labelSelectors:
-      app: pulsar
+      app: pulsarv3
       release: milvus-chaos
   mode: one
   duration: 5m
   stressors:
     memory:
       workers: 4
-      size: 512Mi
+      size: 8GiB

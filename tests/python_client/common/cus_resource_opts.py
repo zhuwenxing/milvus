@@ -97,6 +97,65 @@ class CustomResourceOperations(object):
             raise Exception(str(e))
         return api_response
 
+    def remove_finalizers(self, metadata_name):
+        """remove finalizers from a custom resource to force deletion"""
+        body = {"metadata": {"finalizers": None}}
+        api_instance = client.CustomObjectsApi()
+        try:
+            api_response = api_instance.patch_namespaced_custom_object(
+                self.group, self.version, self.namespace,
+                plural=self.plural,
+                name=metadata_name,
+                body=body
+            )
+            log.info(f"removed finalizers from {metadata_name}")
+            return api_response
+        except ApiException as e:
+            log.warning(f"Failed to remove finalizers from {metadata_name}: {e}")
+            return None
+
+    def force_delete(self, metadata_name, timeout=60):
+        """
+        Force delete a custom resource, removing finalizers if stuck in Terminating state.
+        This is useful for IOChaos/NetworkChaos that may get stuck due to chaos-mesh/records finalizer.
+        """
+        from time import sleep, time
+
+        # First attempt normal delete
+        self.delete(metadata_name, raise_ex=False)
+
+        # Wait and check if resource is deleted
+        t0 = time()
+        while time() - t0 < timeout:
+            try:
+                res = self.get(metadata_name)
+                # Check if resource is stuck in Terminating (has deletionTimestamp)
+                if res.get('metadata', {}).get('deletionTimestamp'):
+                    finalizers = res.get('metadata', {}).get('finalizers', [])
+                    if finalizers:
+                        log.warning(f"{metadata_name} stuck in Terminating with finalizers: {finalizers}")
+                        log.info(f"Removing finalizers to force delete {metadata_name}")
+                        self.remove_finalizers(metadata_name)
+                sleep(2)
+            except Exception as e:
+                # get() raises Exception wrapping ApiException, check if it's 404
+                if '404' in str(e) or 'Not Found' in str(e):
+                    log.info(f"{metadata_name} successfully deleted")
+                    return True
+                log.warning(f"Error checking resource status: {e}")
+                sleep(2)
+
+        # Final check
+        try:
+            self.get(metadata_name)
+            log.error(f"Failed to delete {metadata_name} within {timeout}s")
+            return False
+        except Exception as e:
+            if '404' in str(e) or 'Not Found' in str(e):
+                log.info(f"{metadata_name} successfully deleted")
+                return True
+            return False
+
     def delete_all(self):
         """delete all the customer resources in k8s"""
         cus_objects = self.list_all()

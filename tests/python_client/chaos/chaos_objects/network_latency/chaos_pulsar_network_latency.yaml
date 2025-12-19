@@ -9,7 +9,7 @@ spec:
       - chaos-testing
     labelSelectors:
       release: milvus-chaos
-      app: pulsar
+      app: pulsarv3
   mode: all
   action: delay
   delay:
