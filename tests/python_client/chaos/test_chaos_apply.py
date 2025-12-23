@@ -287,6 +287,11 @@ class TestChaosApply:
         update_key_value(chaos_config, "duration", f"{chaos_duration//60}m")
         if self.deploy_by == "milvus-operator":
             update_key_name(chaos_config, "component", "app.kubernetes.io/component")
+            # milvus-operator deploys third-party components with instance label suffix
+            # e.g., etcd pods have app.kubernetes.io/instance=<release_name>-etcd
+            third_party_components = ["etcd", "kafka", "minio", "pulsar"]
+            if target_component in third_party_components:
+                update_key_value(chaos_config, "app.kubernetes.io/instance", f"{release_name}-{target_component}")
         self._chaos_config = chaos_config  # cache the chaos config for tear down
         log.info(f"chaos_config: {chaos_config}")
 
