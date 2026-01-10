@@ -1,0 +1,228 @@
+# Copyright (C) 2019-2020 Zilliz. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Optimized Makefile with intelligent caching and parallel builds
+# This can be included in the main Makefile or used standalone
+
+.PHONY: help
+help:
+	@echo "Milvus Optimized Build System"
+	@echo ""
+	@echo "Quick Build Commands:"
+	@echo "  make quick              - Fast build (skip checks, use cache)"
+	@echo "  make milvus-opt         - Optimized full build"
+	@echo "  make rebuild-go         - Rebuild Go components only"
+	@echo "  make rebuild-cpp        - Rebuild C++ core only"
+	@echo ""
+	@echo "Development Commands:"
+	@echo "  make dev-setup          - Setup development environment"
+	@echo "  make cache-status       - Show build cache status"
+	@echo "  make clean-soft         - Clean build outputs (keep cache)"
+	@echo "  make clean-hard         - Clean everything including cache"
+	@echo ""
+	@echo "Build Presets (using CMake Presets):"
+	@echo "  make cmake-dev          - Configure for development"
+	@echo "  make cmake-release      - Configure for release"
+	@echo "  make cmake-coverage     - Configure with coverage"
+	@echo "  make cmake-gpu          - Configure for GPU"
+	@echo ""
+	@echo "Performance:"
+	@echo "  make build-metrics      - Show build performance metrics"
+	@echo ""
+
+# Include original Makefile variables
+PWD := $(shell pwd)
+INSTALL_PATH := $(PWD)/bin
+LIBRARY_PATH := $(PWD)/lib
+PGO_PATH := $(PWD)/configs/pgo
+BUILD_ROOT := $(PWD)
+
+# Optimized build with intelligent caching
+.PHONY: milvus-opt
+milvus-opt: generated-proto-opt build-cpp-opt build-go
+	@echo "✓ Optimized build completed!"
+
+# Intelligent proto generation (with caching)
+.PHONY: generated-proto-opt
+generated-proto-opt: get-proto-deps
+	@echo "→ Checking proto generation..."
+	@bash $(PWD)/scripts/proto_manager.sh
+
+# Intelligent dependency management
+.PHONY: build-deps-opt
+build-deps-opt:
+	@echo "→ Checking dependencies..."
+	@bash $(PWD)/scripts/deps_manager.sh
+
+# Optimized C++ build
+.PHONY: build-cpp-opt
+build-cpp-opt: generated-proto-opt build-deps-opt
+	@echo "→ Building C++ core (optimized)..."
+	@USE_NINJA=ON bash $(PWD)/scripts/core_build_optimized.sh -t Release -y ON
+
+# Optimized C++ build with tests
+.PHONY: build-cpp-opt-test
+build-cpp-opt-test: generated-proto-opt build-deps-opt
+	@echo "→ Building C++ core with tests (optimized)..."
+	@USE_NINJA=ON bash $(PWD)/scripts/core_build_optimized.sh -t Release -u -y ON
+
+# Quick build (maximum speed, skip unnecessary checks)
+.PHONY: quick
+quick:
+	@echo "⚡ Quick build mode (skipping checks)..."
+	@export SKIP_3RDPARTY=1 && \
+		bash $(PWD)/scripts/core_build_optimized.sh -t Release && \
+		$(MAKE) build-go
+
+# Rebuild Go only (after C++ is built)
+.PHONY: rebuild-go
+rebuild-go:
+	@echo "→ Rebuilding Go components only..."
+	@source $(PWD)/scripts/setenv.sh && \
+		mkdir -p $(INSTALL_PATH) && \
+		go env -w CGO_ENABLED="1" && \
+		GO111MODULE=on go build \
+		-pgo=$(PGO_PATH)/default.pgo \
+		-ldflags="-r $${RPATH}" \
+		-tags dynamic,sonic,with_jemalloc \
+		-o $(INSTALL_PATH)/milvus \
+		$(PWD)/cmd/main.go
+
+# Rebuild C++ only (incremental)
+.PHONY: rebuild-cpp
+rebuild-cpp:
+	@echo "→ Rebuilding C++ core only (incremental)..."
+	@cd cmake_build && \
+		if command -v ninja >/dev/null 2>&1 && [ -f build.ninja ]; then \
+			ninja -j$(shell nproc) install; \
+		else \
+			make -j$(shell nproc) install; \
+		fi
+
+# CMake preset configurations
+.PHONY: cmake-dev
+cmake-dev:
+	@echo "→ Configuring CMake (development preset)..."
+	@cmake --preset dev
+
+.PHONY: cmake-release
+cmake-release:
+	@echo "→ Configuring CMake (release preset)..."
+	@cmake --preset release
+
+.PHONY: cmake-coverage
+cmake-coverage:
+	@echo "→ Configuring CMake (coverage preset)..."
+	@cmake --preset coverage
+
+.PHONY: cmake-gpu
+cmake-gpu:
+	@echo "→ Configuring CMake (GPU preset)..."
+	@cmake --preset gpu
+
+# Build using presets
+.PHONY: build-preset-%
+build-preset-%:
+	@echo "→ Building with preset $*..."
+	@cmake --build --preset $*
+
+# Development environment setup
+.PHONY: dev-setup
+dev-setup:
+	@echo "→ Setting up development environment..."
+	@bash $(PWD)/scripts/dev_setup.sh
+
+# Cache management
+.PHONY: cache-status
+cache-status:
+	@bash -c "source $(PWD)/scripts/build_utils.sh && show_cache_status"
+
+.PHONY: clean-soft
+clean-soft:
+	@echo "→ Cleaning build outputs (preserving cache)..."
+	@rm -rf bin/ lib/
+	@if [ -d cmake_build ]; then \
+		cd cmake_build && \
+		if [ -f build.ninja ]; then \
+			ninja clean 2>/dev/null || true; \
+		else \
+			make clean 2>/dev/null || true; \
+		fi; \
+	fi
+	@echo "✓ Soft clean completed"
+
+.PHONY: clean-hard
+clean-hard: clean-soft
+	@echo "→ Cleaning all caches..."
+	@rm -rf cmake_build/ .build/
+	@if command -v ccache >/dev/null 2>&1; then \
+		ccache -C; \
+	fi
+	@echo "✓ Hard clean completed"
+
+# Build performance metrics
+.PHONY: build-metrics
+build-metrics:
+	@bash $(PWD)/scripts/build_metrics.sh
+
+# Test targets with optimized builds
+.PHONY: test-opt
+test-opt: build-cpp-opt-test
+	@echo "→ Running tests with optimized build..."
+	@bash $(PWD)/scripts/run_go_unittest.sh
+	@bash $(PWD)/scripts/run_cpp_unittest.sh
+
+# Parallel test execution
+.PHONY: test-parallel
+test-parallel: build-cpp-opt-test
+	@echo "→ Running tests in parallel..."
+	@bash $(PWD)/scripts/run_go_unittest.sh & \
+	bash $(PWD)/scripts/run_cpp_unittest.sh & \
+	wait
+
+# Format check (fast)
+.PHONY: fmt-check
+fmt-check:
+	@echo "→ Checking code format..."
+	@GO111MODULE=on bash $(PWD)/scripts/gofmt.sh cmd/ internal/ pkg/ tests/
+
+# Watch mode for development (requires entr or similar)
+.PHONY: watch
+watch:
+	@echo "→ Watching for changes (requires 'entr')..."
+	@if ! command -v entr >/dev/null 2>&1; then \
+		echo "Error: 'entr' not found. Install with: apt-get install entr"; \
+		exit 1; \
+	fi
+	@find internal/ cmd/ pkg/ -name '*.go' | entr -r make rebuild-go
+
+# Show build configuration
+.PHONY: show-config
+show-config:
+	@echo "=== Build Configuration ==="
+	@echo "Build root:    $(BUILD_ROOT)"
+	@echo "Install path:  $(INSTALL_PATH)"
+	@echo "Library path:  $(LIBRARY_PATH)"
+	@echo ""
+	@echo "=== Tool Versions ==="
+	@echo -n "Go:       " && go version 2>/dev/null || echo "not found"
+	@echo -n "CMake:    " && cmake --version 2>/dev/null | head -n1 || echo "not found"
+	@echo -n "Ninja:    " && ninja --version 2>/dev/null || echo "not found (will use make)"
+	@echo -n "ccache:   " && ccache --version 2>/dev/null | head -n1 || echo "not found"
+	@echo -n "Conan:    " && conan --version 2>/dev/null || echo "not found"
+	@echo ""
+	@if command -v ccache >/dev/null 2>&1; then \
+		echo "=== ccache Config ==="; \
+		ccache -p | grep -E "(max_size|compression|sloppiness)" || true; \
+	fi
