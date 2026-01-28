@@ -2,6 +2,7 @@ package datacoord
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -317,4 +318,61 @@ func (s *ForceMergeCompactionPolicySuite) TestTriggerOneCollection_FilterSegment
 			s.Equal(commonpb.SegmentState_Flushed, seg.State)
 		}
 	}
+}
+
+func (s *ForceMergeCompactionPolicySuite) TestTriggerOneCollection_AutoCalculateMode() {
+	// Test that max_int64 (auto-calculate mode) doesn't cause overflow
+	ctx := context.Background()
+	collectionID := int64(1)
+	targetSize := int64(math.MaxInt64) // Auto-calculate mode
+	triggerID := int64(100)
+
+	coll := &collectionInfo{
+		ID:         collectionID,
+		Schema:     newTestSchema(),
+		Properties: nil,
+	}
+
+	topology := &CollectionTopology{
+		CollectionID: collectionID,
+		NumReplicas:  1,
+	}
+
+	s.mockHandler.EXPECT().GetCollection(mock.Anything, collectionID).Return(coll, nil)
+	s.mockAlloc.EXPECT().AllocID(mock.Anything).Return(triggerID, nil)
+	s.mockQuerier.EXPECT().GetCollectionTopology(mock.Anything, collectionID).Return(topology, nil)
+
+	views, gotTriggerID, err := s.policy.triggerOneCollection(ctx, collectionID, targetSize)
+
+	// Should not overflow and should succeed
+	s.NoError(err)
+	s.Equal(triggerID, gotTriggerID)
+	s.NotNil(views)
+	s.Greater(len(views), 0)
+}
+
+func (s *ForceMergeCompactionPolicySuite) TestTriggerOneCollection_TargetSizeTooSmall() {
+	// Test that error message contains MB unit
+	ctx := context.Background()
+	collectionID := int64(1)
+	targetSize := int64(100) // 100 MB, which is less than configMaxSize (512 MB)
+	triggerID := int64(100)
+
+	coll := &collectionInfo{
+		ID:         collectionID,
+		Schema:     newTestSchema(),
+		Properties: nil,
+	}
+
+	s.mockHandler.EXPECT().GetCollection(mock.Anything, collectionID).Return(coll, nil)
+	s.mockAlloc.EXPECT().AllocID(mock.Anything).Return(triggerID, nil)
+
+	views, gotTriggerID, err := s.policy.triggerOneCollection(ctx, collectionID, targetSize)
+
+	s.Error(err)
+	s.Nil(views)
+	s.Equal(int64(0), gotTriggerID)
+	// Verify error message contains MB unit
+	s.Contains(err.Error(), "MB")
+	s.Contains(err.Error(), "100")
 }

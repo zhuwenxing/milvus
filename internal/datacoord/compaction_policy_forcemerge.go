@@ -3,6 +3,7 @@ package datacoord
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/samber/lo"
 	"go.uber.org/zap"
@@ -87,8 +88,21 @@ func (policy *forceMergeCompactionPolicy) triggerOneCollection(
 	}
 
 	configMaxSize := getExpectedSegmentSize(policy.meta, collectionID, collection.Schema)
-	if targetSize < configMaxSize {
-		return nil, 0, merr.WrapErrParameterInvalidMsg(fmt.Sprintf("targetSize %d should be greater than or equal to configMaxSize %d", targetSize, configMaxSize))
+	configMaxSizeMB := configMaxSize / (1024 * 1024)
+
+	// Convert targetSize from MB to bytes, handling overflow
+	var targetSizeBytes int64
+	if targetSize > math.MaxInt64/(1024*1024) {
+		// Auto-calculate mode: any value that would overflow uses max safe size
+		targetSizeBytes = math.MaxInt64
+	} else {
+		targetSizeBytes = targetSize * 1024 * 1024
+	}
+
+	if targetSizeBytes < configMaxSize {
+		return nil, 0, merr.WrapErrParameterInvalidMsg(
+			fmt.Sprintf("targetSize %d MB should be greater than or equal to configMaxSize %d MB",
+				targetSize, configMaxSizeMB))
 	}
 
 	segments := policy.meta.SelectSegments(ctx, WithCollection(collectionID), SegmentFilterFunc(func(segment *SegmentInfo) bool {
@@ -119,7 +133,7 @@ func (policy *forceMergeCompactionPolicy) triggerOneCollection(
 			collectionTTL: collectionTTL,
 
 			configMaxSize:      float64(configMaxSize),
-			expectedTargetSize: float64(targetSize),
+			expectedTargetSize: float64(targetSizeBytes),
 			topology:           topology,
 		}
 		views = append(views, view)
