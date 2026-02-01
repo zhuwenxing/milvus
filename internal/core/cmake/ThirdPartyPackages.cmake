@@ -12,6 +12,31 @@
 
 message(STATUS "Using ${MILVUS_DEPENDENCY_SOURCE} approach to find dependencies")
 
+# =========================================
+# Conan 2 依赖查找
+# =========================================
+# 检查 Conan 2 生成的文件（支持多种目录结构）
+set(_CONAN_TOOLCHAIN_FOUND FALSE)
+foreach(_CONAN_PATH
+    "${CMAKE_BINARY_DIR}/conan/conan/Release/generators"
+    "${CMAKE_BINARY_DIR}/conan/Release/generators"
+    "${CMAKE_BINARY_DIR}/conan"
+    "${CMAKE_BINARY_DIR}")
+    if(EXISTS "${_CONAN_PATH}/conan_toolchain.cmake")
+        set(_CONAN_TOOLCHAIN_FOUND TRUE)
+        set(CONAN_GENERATORS_DIR "${_CONAN_PATH}")
+        message(STATUS "Found Conan 2 generators at: ${CONAN_GENERATORS_DIR}")
+        break()
+    endif()
+endforeach()
+
+if(_CONAN_TOOLCHAIN_FOUND)
+    message(STATUS "Using Conan 2 packages via find_package()")
+    # 添加 generators 目录到 CMAKE_PREFIX_PATH
+    list(APPEND CMAKE_PREFIX_PATH "${CONAN_GENERATORS_DIR}")
+    include(ConanPackages)
+endif()
+
 # For each dependency, set dependency source to global default, if unset
 foreach (DEPENDENCY ${MILVUS_THIRDPARTY_DEPENDENCIES})
     if ("${${DEPENDENCY}_SOURCE}" STREQUAL "")

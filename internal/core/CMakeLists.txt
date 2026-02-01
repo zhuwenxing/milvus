@@ -99,12 +99,19 @@ set( CMAKE_INSTALL_RPATH "/usr/lib" "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTA
 set( CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE )
 
 # **************************** Dependencies ****************************
+# Conan 2 集成：使用 CMakeToolchain 和 CMakeDeps
+# 方式一：通过命令行指定 toolchain 文件
+#   cmake -DCMAKE_TOOLCHAIN_FILE=${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake ...
+# 方式二：自动检测并包含 toolchain 文件
 list( APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR}/conan )
-include( ${CMAKE_BINARY_DIR}/conan/conanbuildinfo.cmake )
-set( CONAN_DISABLE_CHECK_COMPILER ON )
-conan_basic_setup( KEEP_RPATHS )
 
-set( CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${CONAN_PROTOBUF_ROOT})
+# 检测并包含 Conan 2 生成的 toolchain 文件
+if(EXISTS "${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake")
+    include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
+endif()
+
+# 设置 CMAKE_PREFIX_PATH 以便 find_package 能找到 Conan 安装的包
+set( CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${CMAKE_BINARY_DIR}/conan )
 
 include( CTest )
 include( BuildUtils )
