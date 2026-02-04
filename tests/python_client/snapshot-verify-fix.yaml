@@ -1,0 +1,47 @@
+# Milvus Standalone for verifying PR #47096 fix
+# Issues fixed: #47066, #47067, #47068
+# Resource: 1 CU (2 CPU + 8Gi Memory)
+
+apiVersion: milvus.io/v1beta1
+kind: Milvus
+metadata:
+  name: snapshot-verify-fix
+  namespace: chaos-testing
+  labels:
+    app: milvus
+    purpose: verify-pr-47096
+spec:
+  mode: standalone
+  config: {}
+  components:
+    image: harbor.milvus.io/milvus/milvus:master-20260204-f36ed550-amd64
+    version: "2.7.0"  # master branch
+
+    standalone:
+      replicas: 1
+      serviceType: LoadBalancer
+      resources:
+        limits:
+          cpu: '2'
+          memory: 8Gi
+        requests:
+          cpu: '2'
+          memory: 8Gi
+  dependencies:
+    etcd:
+      inCluster:
+        values:
+          replicaCount: 1
+        deletionPolicy: Delete
+        pvcDeletion: true
+    storage:
+      inCluster:
+        values:
+          mode: standalone
+          resources:
+            requests:
+              memory: 100Mi
+          persistence:
+            size: 20Gi
+        deletionPolicy: Delete
+        pvcDeletion: true
