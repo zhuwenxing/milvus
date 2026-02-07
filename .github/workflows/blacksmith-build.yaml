@@ -90,6 +90,9 @@ jobs:
           path: .docker/amd64-ubuntu22.04-conan
       - name: Prepare .docker directories
         run: |
+          # Sticky disk mounts create .docker/ as root-owned.
+          # Fix ownership so builder.sh can mkdir and chmod inside it.
+          sudo chown -R $(id -u):$(id -g) .docker
           # Create directories that builder.sh expects (go-mod, vscode-extensions)
           mkdir -p .docker/amd64-ubuntu22.04-go-mod
           mkdir -p .docker/amd64-ubuntu22.04-vscode-extensions
