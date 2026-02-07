@@ -102,9 +102,38 @@ jobs:
           sudo chown -R $(id -u):$(id -g) .docker
           mkdir -p .docker/amd64-ubuntu22.04-go-mod
           mkdir -p .docker/amd64-ubuntu22.04-vscode-extensions
+      - name: Compute C++ source hash
+        id: cpp-hash
+        run: |
+          HASH=$(git ls-tree -r HEAD internal/core/ cmake/ scripts/core_build.sh | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          CACHE_DIR=".docker/amd64-ubuntu22.04-ccache"
+          if [ -f "$CACHE_DIR/cpp-output.hash" ] && \
+             [ "$(cat $CACHE_DIR/cpp-output.hash)" = "$HASH" ] && \
+             [ -f "$CACHE_DIR/cpp-output.tar.zst" ]; then
+            echo "cache_hit=true" >> $GITHUB_OUTPUT
+            echo "::notice::C++ build cache HIT ($HASH)"
+          else
+            echo "cache_hit=false" >> $GITHUB_OUTPUT
+            echo "::notice::C++ build cache MISS ($HASH)"
+          fi
       - name: Build
         run: |
-          ./build/builder.sh /bin/bash -c "make install USE_ASAN=${{env.useasan}} && chmod -R a+rwx /home/milvus/.conan"
+          CACHE_DIR=".docker/amd64-ubuntu22.04-ccache"
+          if [ "${{ steps.cpp-hash.outputs.cache_hit }}" = "true" ] && tar --zstd -xf "$CACHE_DIR/cpp-output.tar.zst"; then
+            echo "C++ cache hit, building Go only"
+            ./build/builder.sh /bin/bash -c 'make build-go && LIBRARY_PATH=$(pwd)/lib GOPATH=$GOPATH bash scripts/install_milvus.sh'
+          else
+            echo "C++ cache miss, full build"
+            ./build/builder.sh /bin/bash -c "make install USE_ASAN=${{env.useasan}} && chmod -R a+rwx /home/milvus/.conan"
+          fi
+      - name: Save C++ build cache
+        if: steps.cpp-hash.outputs.cache_hit != 'true'
+        run: |
+          sudo chmod -R a+r internal/core/output/ 2>/dev/null || true
+          tar --zstd -cf .docker/amd64-ubuntu22.04-ccache/cpp-output.tar.zst internal/core/output/
+          echo "${{ steps.cpp-hash.outputs.hash }}" > .docker/amd64-ubuntu22.04-ccache/cpp-output.hash
+          echo "Saved C++ build cache ($(du -sh .docker/amd64-ubuntu22.04-ccache/cpp-output.tar.zst | cut -f1))"
       - name: Strip binaries
         run: |
           sudo chmod -R a+rw bin/ lib/
