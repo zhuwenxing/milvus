@@ -1,0 +1,100 @@
+name: Blacksmith Build
+
+# This workflow uses Blacksmith bare-metal runners for faster C++ compilation.
+# Requires Blacksmith GitHub App installed on the repository.
+
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'internal/**'
+      - 'client/**'
+      - 'pkg/**'
+      - 'cmd/**'
+      - 'build/**'
+      - 'tests/integration/**'
+      - '.github/workflows/blacksmith-build.yaml'
+      - '.env'
+      - docker-compose.yml
+      - Makefile
+      - go.mod
+      - '!**.md'
+      - '!build/ci/jenkins/**'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'client/**'
+      - 'cmd/**'
+      - 'build/**'
+      - 'tests/integration/**'
+      - '.github/workflows/blacksmith-build.yaml'
+      - '.env'
+      - docker-compose.yml
+      - Makefile
+      - go.mod
+      - '!**.md'
+      - '!build/ci/jenkins/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  Build:
+    name: Build C++ on Blacksmith (16 vCPU)
+    runs-on: blacksmith-16vcpu-ubuntu-2204
+    steps:
+      - name: 'Setup $HOME'
+        run: |
+            if [ -z "$HOME" ]; then
+                echo '$HOME was no set'
+                echo "HOME=/home/zilliz-user" >> $GITHUB_ENV
+            fi
+            echo "HOME variable is:$HOME"
+            echo "GITHUB_ENV variable is:$GITHUB_ENV"
+      - name: Setup mold
+        uses: rui314/setup-mold@v1
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: 'Check Changed files'
+        id: changed-files-cpp
+        uses: tj-actions/changed-files@v46
+        with:
+          since_last_remote_commit: 'true'
+          files: |
+            **/*.cpp
+            **/*.cc
+            **/*.c
+            **/*.h
+            **/*.hpp
+            **/*.CMakeLists.txt
+            **/conanfile.*
+      - name: 'Setup Use USE_ASAN'
+        if: steps.changed-files-cpp.outputs.any_changed == 'true'
+        run: |
+          echo "useasan=OFF" >> $GITHUB_ENV
+          echo "Setup USE_ASAN to true since cpp file(s) changed"
+      - name: Mount ccache (Sticky Disk)
+        uses: useblacksmith/stickydisk@v1
+        with:
+          key: milvus-ccache
+          path: .docker/amd64-ubuntu22.04-ccache
+      - name: Mount conan (Sticky Disk)
+        uses: useblacksmith/stickydisk@v1
+        with:
+          key: milvus-conan
+          path: .docker/amd64-ubuntu22.04-conan
+      - name: Build
+        run: |
+          ./build/builder.sh /bin/bash -c "make USE_ASAN=${{env.useasan}} build-cpp && chmod -R a+rwx /home/milvus/.conan"
+      - run: |
+          zip -r code.zip . -x "./.docker/*" -x "./cmake_build/thirdparty/**" -x ".git/**"
+      - name: Archive code
+        uses: actions/upload-artifact@v4
+        with:
+          name: code
+          path: code.zip
