@@ -43,13 +43,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  Build:
-    name: Build and Push Image on Blacksmith (16 vCPU)
-    runs-on: blacksmith-16vcpu-ubuntu-2204
+  build:
+    name: Build ${{ matrix.arch }}
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: blacksmith-16vcpu-ubuntu-2204
+            ccache_key: milvus-ccache
+            conan_key: milvus-conan
+            gomod_key: milvus-go-mod
+          - arch: arm64
+            runner: blacksmith-16vcpu-ubuntu-2204-arm
+            ccache_key: milvus-ccache-arm64
+            conan_key: milvus-conan-arm64
+            gomod_key: milvus-go-mod-arm64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
       contents: read
       packages: write
+    env:
+      PLATFORM_ARCH: ${{ matrix.arch }}
     steps:
       - name: 'Setup $HOME'
         run: |
@@ -86,29 +102,29 @@ jobs:
       - name: Mount ccache (Sticky Disk)
         uses: useblacksmith/stickydisk@v1
         with:
-          key: milvus-ccache
-          path: .docker/amd64-ubuntu22.04-ccache
+          key: ${{ matrix.ccache_key }}
+          path: .docker/${{ matrix.arch }}-ubuntu22.04-ccache
       - name: Mount conan (Sticky Disk)
         uses: useblacksmith/stickydisk@v1
         with:
-          key: milvus-conan
-          path: .docker/amd64-ubuntu22.04-conan
+          key: ${{ matrix.conan_key }}
+          path: .docker/${{ matrix.arch }}-ubuntu22.04-conan
       - name: Mount go-mod (Sticky Disk)
         uses: useblacksmith/stickydisk@v1
         with:
-          key: milvus-go-mod
-          path: .docker/amd64-ubuntu22.04-go-mod
+          key: ${{ matrix.gomod_key }}
+          path: .docker/${{ matrix.arch }}-ubuntu22.04-go-mod
       - name: Prepare .docker directories
         run: |
           sudo chown -R $(id -u):$(id -g) .docker
-          mkdir -p .docker/amd64-ubuntu22.04-go-mod
-          mkdir -p .docker/amd64-ubuntu22.04-vscode-extensions
+          mkdir -p .docker/${{ matrix.arch }}-ubuntu22.04-go-mod
+          mkdir -p .docker/${{ matrix.arch }}-ubuntu22.04-vscode-extensions
       - name: Compute C++ source hash
         id: cpp-hash
         run: |
           HASH=$(git ls-tree -r HEAD internal/core/ cmake/ scripts/core_build.sh | sha256sum | cut -d' ' -f1)
           echo "hash=$HASH" >> $GITHUB_OUTPUT
-          CACHE_DIR=".docker/amd64-ubuntu22.04-ccache"
+          CACHE_DIR=".docker/${{ matrix.arch }}-ubuntu22.04-ccache"
           if [ -f "$CACHE_DIR/cpp-output.hash" ] && \
              [ "$(cat $CACHE_DIR/cpp-output.hash)" = "$HASH" ] && \
              [ -f "$CACHE_DIR/cpp-output.tar.zst" ]; then
@@ -120,7 +136,7 @@ jobs:
           fi
       - name: Build
         run: |
-          CACHE_DIR=".docker/amd64-ubuntu22.04-ccache"
+          CACHE_DIR=".docker/${{ matrix.arch }}-ubuntu22.04-ccache"
           if [ "${{ steps.cpp-hash.outputs.cache_hit }}" = "true" ] && tar --zstd -xf "$CACHE_DIR/cpp-output.tar.zst"; then
             echo "C++ cache hit, building Go only"
             ./build/builder.sh /bin/bash -c 'make build-go && LIBRARY_PATH=$(pwd)/lib GOPATH=$GOPATH bash scripts/install_milvus.sh'
@@ -132,9 +148,9 @@ jobs:
         if: steps.cpp-hash.outputs.cache_hit != 'true'
         run: |
           sudo chmod -R a+r internal/core/output/ 2>/dev/null || true
-          tar --zstd -cf .docker/amd64-ubuntu22.04-ccache/cpp-output.tar.zst internal/core/output/
-          echo "${{ steps.cpp-hash.outputs.hash }}" > .docker/amd64-ubuntu22.04-ccache/cpp-output.hash
-          echo "Saved C++ build cache ($(du -sh .docker/amd64-ubuntu22.04-ccache/cpp-output.tar.zst | cut -f1))"
+          tar --zstd -cf .docker/${{ matrix.arch }}-ubuntu22.04-ccache/cpp-output.tar.zst internal/core/output/
+          echo "${{ steps.cpp-hash.outputs.hash }}" > .docker/${{ matrix.arch }}-ubuntu22.04-ccache/cpp-output.hash
+          echo "Saved C++ build cache ($(du -sh .docker/${{ matrix.arch }}-ubuntu22.04-ccache/cpp-output.tar.zst | cut -f1))"
       - name: Strip binaries
         run: |
           sudo chmod -R a+rw bin/ lib/
@@ -150,21 +166,38 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: build/docker/milvus/ubuntu22.04/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.arch }}
           build-args: |
-            TARGETARCH=amd64
+            TARGETARCH=${{ matrix.arch }}
+
+  manifest:
+    name: Create multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create and push multi-arch manifest
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          IMAGE=ghcr.io/${{ github.repository }}
+          docker buildx imagetools create \
+            -t $IMAGE:$SHORT_SHA \
+            -t $IMAGE:${{ github.ref_name }} \
+            $IMAGE:${{ github.sha }}-amd64 \
+            $IMAGE:${{ github.sha }}-arm64
