@@ -98,7 +98,7 @@ jobs:
           mkdir -p .docker/amd64-ubuntu22.04-vscode-extensions
           # builder.sh runs "chmod -R 777 .docker" which fails on sticky disk
           # mount points (Operation not permitted). Make it non-fatal.
-          sed -i 's|chmod -R 777 "${DOCKER_VOLUME_DIRECTORY:-.docker}"|chmod -R 777 "${DOCKER_VOLUME_DIRECTORY:-.docker}" 2>/dev/null || true|' build/builder.sh
+          sed -i 's#chmod -R 777 "${DOCKER_VOLUME_DIRECTORY:-.docker}"#chmod -R 777 "${DOCKER_VOLUME_DIRECTORY:-.docker}" 2>/dev/null || true#' build/builder.sh
       - name: Build
         run: |
           ./build/builder.sh /bin/bash -c "make USE_ASAN=${{env.useasan}} build-cpp && chmod -R a+rwx /home/milvus/.conan"
