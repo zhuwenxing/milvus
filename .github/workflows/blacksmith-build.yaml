@@ -43,9 +43,12 @@ concurrency:
 
 jobs:
   Build:
-    name: Build C++ on Blacksmith (16 vCPU)
+    name: Build and Push Image on Blacksmith (16 vCPU)
     runs-on: blacksmith-16vcpu-ubuntu-2204
     timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: 'Setup $HOME'
         run: |
@@ -89,6 +92,11 @@ jobs:
         with:
           key: milvus-conan
           path: .docker/amd64-ubuntu22.04-conan
+      - name: Mount go-mod (Sticky Disk)
+        uses: useblacksmith/stickydisk@v1
+        with:
+          key: milvus-go-mod
+          path: .docker/amd64-ubuntu22.04-go-mod
       - name: Prepare .docker directories
         run: |
           sudo chown -R $(id -u):$(id -g) .docker
@@ -96,12 +104,34 @@ jobs:
           mkdir -p .docker/amd64-ubuntu22.04-vscode-extensions
       - name: Build
         run: |
-          ./build/builder.sh /bin/bash -c "make USE_ASAN=${{env.useasan}} build-cpp && chmod -R a+rwx /home/milvus/.conan"
-      - name: Package code
+          ./build/builder.sh /bin/bash -c "make install USE_ASAN=${{env.useasan}} && chmod -R a+rwx /home/milvus/.conan"
+      - name: Strip binaries
         run: |
-          zip -r code.zip . -x "./.docker/*" -x "./cmake_build/thirdparty/**" -x ".git/**"
-      - name: Archive code
-        uses: actions/upload-artifact@v4
+          strip bin/milvus || true
+          find lib/ -name "*.so*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          name: code
-          path: code.zip
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: build/docker/milvus/ubuntu22.04/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TARGETARCH=amd64
