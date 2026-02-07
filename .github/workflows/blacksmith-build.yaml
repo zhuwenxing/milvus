@@ -2,6 +2,7 @@ name: Blacksmith Build
 
 # This workflow uses Blacksmith bare-metal runners for faster C++ compilation.
 # Requires Blacksmith GitHub App installed on the repository.
+# Supports C++ build output hash cache to skip rebuild when unchanged.
 
 on:
   push:
