@@ -88,6 +88,11 @@ jobs:
         with:
           key: milvus-conan
           path: .docker/amd64-ubuntu22.04-conan
+      - name: Fix .docker directory permissions
+        run: |
+          sudo chmod 777 .docker
+          mkdir -p .docker/amd64-ubuntu22.04-go-mod
+          mkdir -p .docker/amd64-ubuntu22.04-vscode-extensions
       - name: Build
         run: |
           ./build/builder.sh /bin/bash -c "make USE_ASAN=${{env.useasan}} build-cpp && chmod -R a+rwx /home/milvus/.conan"
