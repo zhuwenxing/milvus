@@ -107,8 +107,11 @@ jobs:
           ./build/builder.sh /bin/bash -c "make install USE_ASAN=${{env.useasan}} && chmod -R a+rwx /home/milvus/.conan"
       - name: Strip binaries
         run: |
+          sudo chmod -R a+rw bin/ lib/
           strip bin/milvus || true
           find lib/ -name "*.so*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
+          ls -lh bin/milvus
+          du -sh lib/
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GHCR

@@ -30,23 +30,23 @@ RUN apt-get update && \
 RUN curl -L -o /tini https://github.com/krallin/tini/releases/download/v0.19.0/tini-$TARGETARCH && \
     chmod +x /tini
 
-RUN mkdir -p /milvus/bin
-COPY --chown=root:root --chmod=774 ./bin/milvus /milvus/bin/milvus
+# Create milvus user before COPY to avoid extra chown layer
+RUN groupadd -r milvus && useradd -r -g milvus milvus && \
+    mkdir -p /milvus/bin /var/lib/milvus && \
+    chown -R milvus:milvus /milvus /var/lib/milvus
 
-COPY --chown=root:root --chmod=774 ./configs/ /milvus/configs/
+COPY --chown=milvus:milvus --chmod=774 ./bin/milvus /milvus/bin/milvus
 
-COPY --chown=root:root --chmod=774 ./lib/ /milvus/lib/
+COPY --chown=milvus:milvus --chmod=774 ./configs/ /milvus/configs/
+
+COPY --chown=milvus:milvus --chmod=774 ./lib/ /milvus/lib/
 
 ENV PATH=/milvus/bin:$PATH
 ENV LD_LIBRARY_PATH=/milvus/lib:$LD_LIBRARY_PATH:/usr/lib
 ENV LD_PRELOAD=${MILVUS_ASAN_LIB}:/milvus/lib/libjemalloc.so
 ENV MALLOC_CONF=background_thread:true
 
-# Change user to milvus
 ENV ASAN_OPTIONS=detect_leaks=0
-RUN groupadd -r milvus && useradd -r -g milvus milvus && \
-    mkdir -p /var/lib/milvus && \
-    chown -R milvus:milvus /milvus /var/lib/milvus
 ENV ASAN_OPTIONS=detect_leaks=1
 USER milvus:milvus
 
