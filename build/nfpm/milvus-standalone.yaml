@@ -1,0 +1,16 @@
+# Milvus standalone configuration
+# Embedded etcd + local storage for zero-dependency deployment
+
+etcd:
+  use:
+    embed: true
+  data:
+    dir: /var/lib/milvus/etcd
+  config:
+    path: /etc/milvus/advanced/etcd.yaml
+
+localStorage:
+  path: /var/lib/milvus/data
+
+common:
+  storageType: local

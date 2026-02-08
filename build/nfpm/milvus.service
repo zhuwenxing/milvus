@@ -1,0 +1,17 @@
+[Unit]
+Description=Milvus Standalone Server
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+Environment="LD_LIBRARY_PATH=/usr/lib/milvus"
+ExecStart=/usr/bin/milvus run standalone --config-dir /etc/milvus
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+WorkingDirectory=/var/lib/milvus
+StandardOutput=journal
+StandardError=journal

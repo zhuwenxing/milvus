@@ -1,0 +1,70 @@
+name: milvus
+arch: "${ARCH}"
+platform: linux
+version: "${VERSION}"
+maintainer: Milvus Team
+description: Milvus standalone vector database - single binary with embedded etcd and local storage
+vendor: Zilliz
+homepage: https://milvus.io
+license: Apache-2.0
+
+contents:
+  # Binary
+  - src: bin/milvus
+    dst: /usr/bin/milvus
+    file_info:
+      mode: 0755
+
+  # Shared libraries (tree copy)
+  - src: lib/
+    dst: /usr/lib/milvus/
+    type: tree
+
+  # Standalone config (embed etcd + local storage)
+  - src: build/nfpm/milvus-standalone.yaml
+    dst: /etc/milvus/milvus.yaml
+    type: config
+
+  # Etcd config for embedded mode
+  - src: configs/advanced/etcd.yaml
+    dst: /etc/milvus/advanced/etcd.yaml
+    type: config
+
+  # Systemd service
+  - src: build/nfpm/milvus.service
+    dst: /lib/systemd/system/milvus.service
+
+  # ld.so config for shared libraries
+  - src: build/nfpm/milvus-ld.conf
+    dst: /etc/ld.so.conf.d/milvus.conf
+
+  # Data directories
+  - dst: /var/lib/milvus/data
+    type: dir
+    file_info:
+      mode: 0755
+  - dst: /var/lib/milvus/etcd
+    type: dir
+    file_info:
+      mode: 0755
+  - dst: /var/log/milvus
+    type: dir
+    file_info:
+      mode: 0755
+
+scripts:
+  postinstall: build/nfpm/postinstall.sh
+  preremove: build/nfpm/preremove.sh
+  postremove: build/nfpm/postremove.sh
+
+depends:
+  - libaio1
+  - libgomp1
+  - libopenblas-dev
+
+overrides:
+  rpm:
+    depends:
+      - libaio
+      - libgomp
+      - openblas-devel

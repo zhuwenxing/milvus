@@ -167,6 +167,25 @@ jobs:
           find lib/ -name "*.so*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
           ls -lh bin/milvus
           du -sh lib/
+      - name: Package deb/rpm
+        run: |
+          NFPM_ARCH=${{ matrix.arch == 'amd64' && 'x86_64' || 'arm64' }}
+          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_Linux_${NFPM_ARCH}.tar.gz | tar xz -C /usr/local/bin nfpm
+
+          export VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.0-$(git rev-parse --short HEAD)")
+          export ARCH=${{ matrix.arch }}
+
+          nfpm package -p deb -f build/nfpm/nfpm.yaml -t milvus_${VERSION}_${{ matrix.arch }}.deb
+          nfpm package -p rpm -f build/nfpm/nfpm.yaml -t milvus-${VERSION}.${{ matrix.arch == 'amd64' && 'x86_64' || 'aarch64' }}.rpm
+
+          ls -lh milvus*.deb milvus*.rpm
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.arch }}
+          path: |
+            milvus*.deb
+            milvus*.rpm
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GHCR
@@ -210,3 +229,22 @@ jobs:
             -t $IMAGE:${{ github.ref_name }} \
             $IMAGE:${{ github.sha }}-amd64 \
             $IMAGE:${{ github.sha }}-arm64
+
+  release:
+    name: Create GitHub Release
+    needs: [build, manifest]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            milvus*.deb
+            milvus*.rpm
+          generate_release_notes: true
