@@ -55,11 +55,13 @@ jobs:
             ccache_key: milvus-ccache
             conan_key: milvus-conan
             gomod_key: milvus-go-mod
+            cmake_build_key: milvus-cmake-build
           - arch: arm64
             runner: blacksmith-16vcpu-ubuntu-2204-arm
             ccache_key: milvus-ccache-arm64
             conan_key: milvus-conan-arm64
             gomod_key: milvus-go-mod-arm64
+            cmake_build_key: milvus-cmake-build-arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
@@ -115,9 +117,15 @@ jobs:
         with:
           key: ${{ matrix.gomod_key }}
           path: .docker/${{ matrix.arch }}-ubuntu22.04-go-mod
-      - name: Prepare .docker directories
+      - name: Mount cmake-build (Sticky Disk)
+        uses: useblacksmith/stickydisk@v1
+        with:
+          key: ${{ matrix.cmake_build_key }}
+          path: cmake_build
+      - name: Prepare directories
         run: |
-          sudo chown -R $(id -u):$(id -g) .docker
+          sudo chown -R $(id -u):$(id -g) .docker cmake_build
+          chmod -R 777 cmake_build 2>/dev/null || true
           mkdir -p .docker/${{ matrix.arch }}-ubuntu22.04-go-mod
           mkdir -p .docker/${{ matrix.arch }}-ubuntu22.04-vscode-extensions
       - name: Compute C++ source hash
