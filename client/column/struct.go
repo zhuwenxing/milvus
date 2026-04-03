@@ -62,7 +62,7 @@ func (c *columnStructArray) Slice(start, end int) Column {
 
 func (c *columnStructArray) FieldData() *schemapb.FieldData {
 	return &schemapb.FieldData{
-		Type:      schemapb.DataType_Array,
+		Type:      schemapb.DataType_ArrayOfStruct,
 		FieldName: c.name,
 		Field: &schemapb.FieldData_StructArrays{
 			StructArrays: &schemapb.StructArrayField{

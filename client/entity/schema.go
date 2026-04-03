@@ -155,6 +155,9 @@ func (s *Schema) ProtoMessage() *schemapb.CollectionSchema {
 			TypeParams:  MapKvPairs(field.TypeParams),
 		}
 		if field.StructSchema != nil {
+			// Get parent struct array's max_capacity to propagate to sub-fields
+			parentMaxCapacity := field.TypeParams[TypeParamMaxCapacity]
+
 			f.Fields = lo.Map(field.StructSchema.Fields, func(field *Field, _ int) *schemapb.FieldSchema {
 				// translate to ArrayStruct
 				f := field.ProtoMessage()
@@ -163,6 +166,22 @@ func (s *Schema) ProtoMessage() *schemapb.CollectionSchema {
 					f.DataType = schemapb.DataType_ArrayOfVector
 				} else {
 					f.DataType = schemapb.DataType_Array
+				}
+				// Propagate max_capacity from parent struct array to each sub-field
+				if parentMaxCapacity != "" {
+					hasMaxCap := false
+					for _, kv := range f.TypeParams {
+						if kv.Key == TypeParamMaxCapacity {
+							hasMaxCap = true
+							break
+						}
+					}
+					if !hasMaxCap {
+						f.TypeParams = append(f.TypeParams, &commonpb.KeyValuePair{
+							Key:   TypeParamMaxCapacity,
+							Value: parentMaxCapacity,
+						})
+					}
 				}
 				return f
 			})
@@ -192,6 +211,37 @@ func (s *Schema) ReadProto(p *schemapb.CollectionSchema) *Schema {
 		}
 		s.Fields = append(s.Fields, field)
 	}
+	// struct array fields — reconstruct as regular Fields with StructSchema
+	for _, saf := range p.GetStructArrayFields() {
+		field := NewField().
+			WithName(saf.GetName()).
+			WithDescription(saf.GetDescription()).
+			WithDataType(FieldTypeArray).
+			WithElementType(FieldTypeStruct)
+		if tp := saf.GetTypeParams(); len(tp) > 0 {
+			field.TypeParams = make(map[string]string)
+			for _, kv := range tp {
+				field.TypeParams[kv.GetKey()] = kv.GetValue()
+			}
+		}
+		// Rebuild StructSchema from sub-fields
+		if len(saf.GetFields()) > 0 {
+			structSchema := NewStructSchema()
+			for _, sf := range saf.GetFields() {
+				subField := NewField().ReadProto(sf)
+				// Restore original data types: sub-fields in proto have Array/ArrayOfVector wrapping
+				if sf.GetDataType() == schemapb.DataType_Array {
+					subField.DataType = FieldType(sf.GetElementType())
+				} else if sf.GetDataType() == schemapb.DataType_ArrayOfVector {
+					subField.DataType = FieldType(sf.GetElementType())
+				}
+				structSchema = structSchema.WithField(subField)
+			}
+			field = field.WithStructSchema(structSchema)
+		}
+		s.Fields = append(s.Fields, field)
+	}
+
 	// functions
 	s.Functions = lo.Map(p.GetFunctions(), func(fn *schemapb.FunctionSchema, _ int) *Function {
 		return NewFunction().ReadProto(fn)
