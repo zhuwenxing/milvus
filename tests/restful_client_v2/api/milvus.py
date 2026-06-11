@@ -1,14 +1,15 @@
 import json
-import requests
 import time
-import uuid
-from utils.util_log import test_log as logger
-from minio import Minio
-from minio.error import S3Error
-from minio.commonconfig import CopySource
-from tenacity import retry, retry_if_exception_type, stop_after_attempt
-from requests.exceptions import ConnectionError
 import urllib.parse
+import uuid
+
+import requests
+from minio import Minio
+from minio.commonconfig import CopySource
+from minio.error import S3Error
+from requests.exceptions import ConnectionError
+from tenacity import retry, retry_if_exception_type, stop_after_attempt
+from utils.util_log import test_log as logger
 
 REQUEST_TIMEOUT = "120"
 
@@ -90,7 +91,7 @@ def logger_request_response(response, url, tt, headers, data, str_data, str_resp
             f"method: \nmethod: {method}, \nurl: {url}, \ncost time: {tt}, \nheader: {headers}, \npayload: {data}, \nresponse: {response.text}, \nerror: {e}")
 
 
-class Requests():
+class Requests:
     uuid = str(uuid.uuid1())
 
     def __init__(self, url=None, api_key=None):
@@ -558,7 +559,7 @@ class CollectionClient(Requests):
         if db_name != "default":
             payload["dbName"] = db_name
         response = self.post(url, headers=self.update_headers(), data=payload)
-        return response.json()    
+        return response.json()
 
     def flush(self, collection_name, db_name="default"):
         """Flush collection"""
@@ -573,11 +574,12 @@ class CollectionClient(Requests):
         response = self.post(url, headers=self.update_headers(), data=payload)
         return response.json()
 
-    def compact(self, collection_name, db_name="default"):
+    def compact(self, collection_name, db_name="default", is_clustering=False):
         """Compact collection"""
         url = f"{self.endpoint}/v2/vectordb/collections/compact"
         payload = {
-            "collectionName": collection_name
+            "collectionName": collection_name,
+            "isClustering": is_clustering,
         }
         if self.db_name is not None:
             payload["dbName"] = self.db_name
@@ -586,11 +588,11 @@ class CollectionClient(Requests):
         response = self.post(url, headers=self.update_headers(), data=payload)
         return response.json()
 
-    def get_compaction_state(self, collection_name, db_name="default"):
+    def get_compaction_state(self, job_id, db_name="default"):
         """Get compaction state"""
         url = f"{self.endpoint}/v2/vectordb/collections/get_compaction_state"
         payload = {
-            "collectionName": collection_name
+            "jobID": job_id
         }
         if self.db_name is not None:
             payload["dbName"] = self.db_name
@@ -985,6 +987,65 @@ class ImportJobClient(Requests):
         res = response.json()
         return res
 
+    def describe_import_job(self, job_id, db_name="default"):
+        if self.db_name is not None:
+            db_name = self.db_name
+        payload = {
+            "dbName": db_name,
+            "jobId": job_id
+        }
+        if db_name is None:
+            payload.pop("dbName")
+        if job_id is None:
+            payload.pop("jobId")
+        url = f'{self.endpoint}/v2/vectordb/jobs/import/describe'
+        response = self.post(url, headers=self.update_headers(), data=payload)
+        return response.json()
+
+    def commit_import_job(self, job_id, db_name="default"):
+        if self.db_name is not None:
+            db_name = self.db_name
+        payload = {
+            "dbName": db_name,
+            "jobId": job_id
+        }
+        if db_name is None:
+            payload.pop("dbName")
+        if job_id is None:
+            payload.pop("jobId")
+        url = f'{self.endpoint}/v2/vectordb/jobs/import/commit'
+        response = self.post(url, headers=self.update_headers(), data=payload)
+        return response.json()
+
+    def abort_import_job(self, job_id, db_name="default"):
+        if self.db_name is not None:
+            db_name = self.db_name
+        payload = {
+            "dbName": db_name,
+            "jobId": job_id
+        }
+        if db_name is None:
+            payload.pop("dbName")
+        if job_id is None:
+            payload.pop("jobId")
+        url = f'{self.endpoint}/v2/vectordb/jobs/import/abort'
+        response = self.post(url, headers=self.update_headers(), data=payload)
+        return response.json()
+
+    def wait_import_job_state(self, job_id, expected_state, timeout=120, db_name="default", interval=2):
+        t0 = time.time()
+        last_rsp = self.get_import_job_progress(job_id, db_name=db_name)
+        while time.time() - t0 < timeout:
+            last_rsp = self.get_import_job_progress(job_id, db_name=db_name)
+            if last_rsp.get("code") == 0:
+                state = last_rsp.get("data", {}).get("state")
+                if state == expected_state:
+                    return last_rsp, True
+                if state in ("Completed", "Failed"):
+                    return last_rsp, False
+            time.sleep(interval)
+        return last_rsp, False
+
     def wait_import_job_completed(self, job_id):
         finished = False
         t0 = time.time()
@@ -1059,7 +1120,7 @@ class DatabaseClient(Requests):
         return response.json()
 
 
-class StorageClient():
+class StorageClient:
 
     def __init__(self, endpoint, access_key, secret_key, bucket_name, root_path="file"):
         self.endpoint = endpoint
