@@ -37,6 +37,7 @@ import (
 	"github.com/milvus-io/milvus-proto/go-api/v3/milvuspb"
 	"github.com/milvus-io/milvus-proto/go-api/v3/schemapb"
 	"github.com/milvus-io/milvus/internal/distributed/streaming"
+	"github.com/milvus-io/milvus/internal/flushcommon/syncmgr"
 	"github.com/milvus-io/milvus/internal/querynodev2/cluster"
 	"github.com/milvus-io/milvus/internal/querynodev2/delegator/deletebuffer"
 	"github.com/milvus-io/milvus/internal/querynodev2/segments"
@@ -86,7 +87,6 @@ type ShardDelegator interface {
 	// data
 	ProcessInsert(insertRecords map[int64]*InsertData)
 	ProcessDelete(deleteData []*DeleteData, ts uint64)
-	ProcessManualFlush(ctx context.Context, flushTs uint64) error
 	LoadGrowing(ctx context.Context, infos []*querypb.SegmentLoadInfo, version int64) error
 	LoadL0(ctx context.Context, infos []*querypb.SegmentLoadInfo, version int64) error
 	LoadSegments(ctx context.Context, req *querypb.LoadSegmentsRequest) error
@@ -183,11 +183,10 @@ type shardDelegator struct {
 	// for slow down the delegator consumption and reduce the timetick dispatch frequency.
 	latestRequiredMVCCTimeTick *atomic.Uint64
 
-	// growing segment flush support for TEXT collections
-	// checkpointTracker tracks offset -> MsgPosition mapping for Growing Segments
-	checkpointTracker *segments.CheckpointTracker
-	// growingFlushManager manages periodic flush of Growing Segments (for TEXT collections)
-	growingFlushManager *segments.GrowingFlushManager
+	// growingSourceRegistration is the process-local registry lease for this
+	// delegator's optional growing-source source.
+	growingSourceRegistration *syncmgr.GrowingSourceRegistration
+	growingSourceProvider     *delegatorGrowingSourceProvider
 }
 
 // getLogger returns the zap logger with pre-defined shard attributes.
@@ -234,30 +233,24 @@ func (sd *shardDelegator) Stopped() bool {
 	return sd.NotStopped(sd.lifetime.GetState()) != nil
 }
 
-func (sd *shardDelegator) prepareSearchFunction(req *internalpb.SearchRequest) (float64, bool, error) {
+func (sd *shardDelegator) prepareSearchFunction(ctx context.Context, req *internalpb.SearchRequest) (float64, bool, error) {
 	var avgdl float64
 	isBM25 := false
-	err := sd.functionState.withSearchFunction(req.GetFieldId(), func(functionType schemapb.FunctionType, functionRunner function.FunctionRunner, ok bool) error {
+	err := sd.functionState.withSearchFunction(req.GetFieldId(), func(functionType schemapb.FunctionType) error {
 		switch functionType {
 		case schemapb.FunctionType_BM25:
 			isBM25 = true
 			if req.GetMetricType() != metric.BM25 && req.GetMetricType() != metric.EMPTY {
 				return merr.WrapErrParameterInvalid("BM25", req.GetMetricType(), "must use BM25 metric type when searching against BM25 Function output field")
 			}
-			if !ok {
-				return fmt.Errorf("functionRunner not found for field: %d", req.GetFieldId())
-			}
 			var buildErr error
-			avgdl, buildErr = sd.buildBM25IDFWithRunner(req, functionRunner)
+			avgdl, buildErr = sd.buildBM25IDF(ctx, req)
 			return buildErr
 		case schemapb.FunctionType_MinHash:
 			if req.GetMetricType() != metric.MHJACCARD && req.GetMetricType() != metric.EMPTY {
 				return merr.WrapErrParameterInvalid("MHJACCARD", req.GetMetricType(), "must use MHJACCARD metric type when searching against MinHash Function output field")
 			}
-			if !ok {
-				return fmt.Errorf("functionRunner not found for field: %d", req.GetFieldId())
-			}
-			return sd.parseMinHashWithRunner(req, functionRunner)
+			return sd.parseMinHash(ctx, req)
 		default:
 			return nil
 		}
@@ -268,9 +261,6 @@ func (sd *shardDelegator) prepareSearchFunction(req *internalpb.SearchRequest) (
 // Start sets delegator to working state.
 func (sd *shardDelegator) Start() {
 	sd.lifetime.SetState(lifetime.Working)
-	if sd.growingFlushManager != nil {
-		sd.growingFlushManager.Start(context.Background())
-	}
 }
 
 // Collection returns delegator collection id.
@@ -395,7 +385,7 @@ func (sd *shardDelegator) search(ctx context.Context, req *querypb.SearchRequest
 		)
 	}
 
-	avgdl, skipSearch, err := sd.prepareSearchFunction(req.GetReq())
+	avgdl, skipSearch, err := sd.prepareSearchFunction(ctx, req.GetReq())
 	if err != nil {
 		return nil, err
 	}
@@ -1327,16 +1317,15 @@ func (sd *shardDelegator) Close() {
 	sd.tsCond.L.Unlock()
 	sd.lifetime.Wait()
 
+	if sd.growingSourceProvider != nil {
+		sd.growingSourceProvider.Deactivate()
+	}
+
 	// Stop background snapshot loop before refunding candidates
 	sd.distribution.Close()
 
 	// Refund all sealed segment candidates in distribution
 	sd.distribution.RefundAllCandidates()
-
-	// stop growing flush manager
-	if sd.growingFlushManager != nil {
-		sd.growingFlushManager.Stop()
-	}
 
 	// clean idf oracle
 	if idfOracle := sd.getIDFOracle(); idfOracle != nil {
@@ -1481,25 +1470,16 @@ func NewShardDelegator(ctx context.Context, collectionID UniqueID, replicaID Uni
 		sd.publishIDFOracle(idfOracle)
 	}
 
-	// initialize GrowingFlushManager for TEXT collections
-	// this enables incremental flush of Growing Segments to preserve TEXT data
-	if sd.hasTextFields() {
-		sd.checkpointTracker = segments.NewCheckpointTracker()
-		if binlogSaver != nil {
-			sd.growingFlushManager = segments.NewGrowingFlushManager(
-				collectionID,
-				channel,
-				collection.Schema(),
-				manager.Collection,
-				manager.Segment,
-				binlogSaver,
-				chunkManager,
-				sd.checkpointTracker,
-			)
-			log.Info("initialized GrowingFlushManager for TEXT collection")
-		} else {
-			log.Warn("binlogSaver is nil, GrowingFlushManager not initialized for TEXT collection")
-		}
+	// Register growing-source segments as optional local flush sources. Metadata
+	// commit is still owned by WAL flusher / WriteBuffer.
+	if sd.useGrowingSourceFlush() {
+		sd.growingSourceProvider = newDelegatorGrowingSourceProvider(manager.Segment, func(ctx context.Context, fenceTs uint64) error {
+			_, err := sd.waitTSafe(ctx, fenceTs)
+			return err
+		})
+		sd.growingSourceRegistration = syncmgr.DefaultGrowingSourceRegistry().Register(sd.vchannelName, sd.growingSourceProvider)
+		sd.growingSourceProvider.SetRegistration(sd.growingSourceRegistration)
+		log.Info("registered growing-source source support")
 	}
 
 	sd.tsCond = syncutil.NewContextCond(&sync.Mutex{})
@@ -1508,13 +1488,44 @@ func NewShardDelegator(ctx context.Context, collectionID UniqueID, replicaID Uni
 	return sd, nil
 }
 
-// hasTextFields returns true if the collection has any TEXT type fields.
-func (sd *shardDelegator) hasTextFields() bool {
-	if sd.collection == nil {
+// useGrowingSourceFlush returns true when the collection should expose growing segments as a flush source.
+func (sd *shardDelegator) useGrowingSourceFlush() bool {
+	if sd == nil || sd.collection == nil {
 		return false
 	}
-	for _, field := range sd.collection.Schema().GetFields() {
-		if field.GetDataType() == schemapb.DataType_Text {
+	return typeutil.UseGrowingSourceFlush(sd.collection.Schema(),
+		paramtable.Get().CommonCfg.UseLoonFFI.GetAsBool(),
+		paramtable.Get().CommonCfg.EnableGrowingSourceFlush.GetAsBool())
+}
+
+func (sd *shardDelegator) runWithAnalyzer(ctx context.Context, fieldID int64, run func(function.Analyzer) error) (bool, error) {
+	schema := sd.collection.Schema()
+	ok, err := function.RunWithAnalyzer(ctx, sd.collectionID, schema.GetVersion(), fieldID, run)
+	if ok || err != nil {
+		return ok, err
+	}
+	if fieldHasBM25Analyzer(schema, fieldID) {
+		return false, nil
+	}
+
+	field := typeutil.GetField(schema, fieldID)
+	if field == nil || !typeutil.CreateFieldSchemaHelper(field).EnableAnalyzer() {
+		return false, nil
+	}
+
+	analyzer, err := function.NewAnalyzerRunner(field)
+	if err != nil {
+		return false, err
+	}
+	if runner, ok := analyzer.(function.FunctionRunner); ok {
+		defer runner.Close()
+	}
+	return true, run(analyzer)
+}
+
+func fieldHasBM25Analyzer(schema *schemapb.CollectionSchema, fieldID int64) bool {
+	for _, fn := range schema.GetFunctions() {
+		if fn.GetType() == schemapb.FunctionType_BM25 && slices.Contains(fn.GetInputFieldIds(), fieldID) {
 			return true
 		}
 	}
@@ -1528,7 +1539,7 @@ func (sd *shardDelegator) RunAnalyzer(ctx context.Context, req *querypb.RunAnaly
 		return string(bytes)
 	})
 
-	ok, err := sd.functionState.withAnalyzerRunner(req.GetFieldId(), func(analyzer function.Analyzer) error {
+	ok, err := sd.runWithAnalyzer(ctx, req.GetFieldId(), func(analyzer function.Analyzer) error {
 		if len(analyzer.GetInputFields()) == 1 {
 			result, analyzeErr = analyzer.BatchAnalyze(req.WithDetail, req.WithHash, texts)
 			return analyzeErr
