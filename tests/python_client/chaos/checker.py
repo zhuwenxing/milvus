@@ -321,12 +321,18 @@ class Op(Enum):
 timeout = 120
 search_timeout = 30
 query_timeout = 30
+CHAOS_ADDED_FIELD_PREFIXES = ("new_field_", "new_vec_")
 
 enable_traceback = False
 DEFAULT_FMT = "[start time:{start_time}][time cost:{elapsed:0.8f}s][operation_name:{operation_name}][collection name:{collection_name}] -> {result!r}"
 
 request_records = RequestRecords()
 MAX_ERROR_SAMPLE_LENGTH = 500
+
+
+def is_chaos_added_field(field_name):
+    """Return true for fields added by chaos checkers during a previous test phase."""
+    return isinstance(field_name, str) and field_name.startswith(CHAOS_ADDED_FIELD_PREFIXES)
 
 
 def create_index_params_from_dict(field_name: str, index_param_dict: dict) -> IndexParams:
@@ -525,7 +531,8 @@ class Checker:
         self.p_names = [self.p_name] if partition_name is not None else None
 
         # Get or create schema
-        if self.milvus_client.has_collection(c_name):
+        collection_exists = self.milvus_client.has_collection(c_name)
+        if collection_exists:
             collection_info = self.milvus_client.describe_collection(c_name)
             schema = CollectionSchema.construct_from_dict(collection_info)
         else:
@@ -550,7 +557,7 @@ class Checker:
         self.float_vector_field_name = cf.get_float_vec_field_name(schema=schema)
 
         # Create collection if not exists
-        if not self.milvus_client.has_collection(c_name):
+        if not collection_exists:
             self.milvus_client.create_collection(
                 collection_name=c_name,
                 schema=schema,
@@ -587,10 +594,19 @@ class Checker:
             log.debug(f"Failed to list indexes: {e}")
 
         log.debug(f"Already indexed fields: {indexed_fields}")
+        skipped_bootstrap_index_fields = set()
+
+        def should_create_bootstrap_index(field_name):
+            if field_name in indexed_fields:
+                return False
+            if is_chaos_added_field(field_name):
+                skipped_bootstrap_index_fields.add(field_name)
+                return False
+            return True
 
         # create index for scalar fields
         for f in self.scalar_field_names:
-            if f in indexed_fields:
+            if not should_create_bootstrap_index(f):
                 continue
             try:
                 index_params = IndexParams()
@@ -601,7 +617,7 @@ class Checker:
 
         # create index for json fields
         for f in self.json_field_names:
-            if f in indexed_fields:
+            if not should_create_bootstrap_index(f):
                 continue
             for json_path, json_cast in [("name", "varchar"), ("address", "varchar"), ("count", "double")]:
                 try:
@@ -617,7 +633,7 @@ class Checker:
 
         # create index for geometry fields
         for f in self.geometry_field_names:
-            if f in indexed_fields:
+            if not should_create_bootstrap_index(f):
                 continue
             try:
                 index_params = IndexParams()
@@ -632,6 +648,8 @@ class Checker:
             if f in indexed_fields:
                 vector_index_created = True
                 log.debug(f"Float vector field {f} already has index")
+                continue
+            if not should_create_bootstrap_index(f):
                 continue
             try:
                 index_params = create_index_params_from_dict(f, constants.DEFAULT_INDEX_PARAM)
@@ -648,6 +666,8 @@ class Checker:
                 vector_index_created = True
                 log.debug(f"Int8 vector field {f} already has index")
                 continue
+            if not should_create_bootstrap_index(f):
+                continue
             try:
                 index_params = create_index_params_from_dict(f, constants.DEFAULT_INT8_INDEX_PARAM)
                 self.milvus_client.create_index(collection_name=c_name, index_params=index_params, timeout=timeout)
@@ -663,6 +683,8 @@ class Checker:
                 vector_index_created = True
                 log.debug(f"Binary vector field {f} already has index")
                 continue
+            if not should_create_bootstrap_index(f):
+                continue
             try:
                 index_params = create_index_params_from_dict(f, constants.DEFAULT_BINARY_INDEX_PARAM)
                 self.milvus_client.create_index(collection_name=c_name, index_params=index_params, timeout=timeout)
@@ -674,7 +696,7 @@ class Checker:
 
         # create index for bm25 sparse fields
         for f in self.bm25_sparse_field_names:
-            if f in indexed_fields:
+            if not should_create_bootstrap_index(f):
                 continue
             try:
                 index_params = create_index_params_from_dict(f, constants.DEFAULT_BM25_INDEX_PARAM)
@@ -685,7 +707,7 @@ class Checker:
 
         # create index for minhash fields
         for f in self.minhash_field_names:
-            if f in indexed_fields:
+            if not should_create_bootstrap_index(f):
                 continue
             try:
                 index_params = create_index_params_from_dict(f, constants.DEFAULT_MINHASH_INDEX_PARAM)
@@ -698,7 +720,7 @@ class Checker:
 
         # create index for emb list fields
         for f in self.emb_list_field_names:
-            if f in indexed_fields:
+            if not should_create_bootstrap_index(f):
                 continue
             try:
                 index_params = create_index_params_from_dict(f, constants.DEFAULT_EMB_LIST_INDEX_PARAM)
@@ -706,6 +728,13 @@ class Checker:
                 log.debug(f"Created index for emb list field {f}")
             except Exception as e:
                 log.warning(f"Failed to create index for {f}: {e}")
+
+        if skipped_bootstrap_index_fields:
+            skipped_fields = sorted(skipped_bootstrap_index_fields)
+            log.info(
+                f"Skip bootstrap index creation for {len(skipped_fields)} chaos-added fields "
+                f"in collection {c_name}: {skipped_fields[:10]}"
+            )
 
         # Load collection - only if at least one vector field has an index
         self.replica_number = replica_number
@@ -3882,6 +3911,8 @@ class NullVectorSearchChecker(Checker):
         self.nullable_vector_fields = []
         for field in self.schema.fields:
             if field.dtype in ct.all_dense_vector_types and getattr(field, "nullable", False):
+                if is_chaos_added_field(field.name):
+                    continue
                 self.nullable_vector_fields.append(
                     {"name": field.name, "dim": getattr(field, "dim", ct.default_dim), "dtype": field.dtype}
                 )
