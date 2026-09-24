@@ -30,3 +30,5 @@
 4. `go tool covdata textfmt -i=<go-raw> -o=go.cov` 转换 Go 原始数据。容器内用 `scripts/prepare_e2e_cpp_gcov.sh <coverage-root> /milvus/lib/milvus-e2e-gcov` 将同次构建的 `.gcno` 与 `.gcda` 合并为 GCC JSON。最后用 `scripts/report_e2e_server_coverage.py` 生成映射和摘要。
 
 Go 的百分比使用语句数，C++ 使用可执行行数，两者不能相加。报告分母包含已插桩范围内的生成代码；C++ 报告仅覆盖 Milvus Core 的 `internal/core/src`，不包括 Rust、未插桩的外部依赖。此采集窗口也包含服务端后台任务、健康检查以及用例结束后的异步工作，因此“非零”表示**该时间窗口执行过**，不能单凭计数断言每一行都由该 case 独自触发。严格归因应给每个 case 隔离服务实例，并做相同时间长度的空载基线对照；集群部署还需对每个 Milvus 进程分别重置、快照和合并。
+
+复用同一个服务进程采集多个 case 时，必须在每轮之间归档并清空磁盘上的 Go `covcounters` 和 C++ `.gcda`。GCC 会将新计数累加到已有 `.gcda`；仅调用 `__gcov_reset` 只清空运行时计数。当前 Pod 实测连续两轮 `SIGUSR2`→`SIGUSR1` 均能更新 `.gcda`，但尚未验证自动化的多 case 数据隔离，因此本 PoC 的报告只对应第一轮单 case 快照。参考 [GCC 12.3 gcov 文档](https://gcc.gnu.org/onlinedocs/gcc-12.3.0/gcc/Invoking-Gcov.html)。
