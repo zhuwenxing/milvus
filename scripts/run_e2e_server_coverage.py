@@ -154,6 +154,7 @@ def copy_from_pod(env, namespace, pod, remote, local):
             "-n",
             namespace,
             "cp",
+            "--retries=3",
             "-c",
             "standalone",
             f"{namespace}/{pod}:{remote}",
@@ -161,6 +162,38 @@ def copy_from_pod(env, namespace, pod, remote, local):
         ],
         env=env,
     )
+
+
+def copy_large_archive(env, namespace, pod, remote, local):
+    """Copy a gcov archive in small chunks across the vCluster API proxy."""
+    kubectl(
+        env,
+        namespace,
+        pod,
+        "split",
+        "-b",
+        "4m",
+        "-d",
+        "-a",
+        "3",
+        remote,
+        remote + ".part.",
+    )
+    parts = kubectl(
+        env, namespace, pod, "sh", "-c", f"ls {remote}.part.*"
+    ).stdout.splitlines()
+    if not parts or any(
+        not re.fullmatch(re.escape(remote) + r"\.part\.\d{3}", part) for part in parts
+    ):
+        raise RuntimeError("gcov archive was not split into numbered parts")
+    with local.open("wb") as assembled:
+        for part in parts:
+            chunk = local.parent / Path(part).name
+            copy_from_pod(env, namespace, pod, part, chunk)
+            with chunk.open("rb") as data:
+                while block := data.read(1024 * 1024):
+                    assembled.write(block)
+            chunk.unlink()
 
 
 def collect(env, namespace, pod, output_dir):
@@ -196,7 +229,7 @@ def collect(env, namespace, pod, output_dir):
     )
     output_dir.mkdir(parents=True)
     copy_from_pod(env, namespace, pod, f"{COVERAGE_ROOT}/go", output_dir / "go-raw")
-    copy_from_pod(
+    copy_large_archive(
         env,
         namespace,
         pod,
