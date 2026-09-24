@@ -138,3 +138,6 @@ docs/plans/
 
 # Local run artifacts of internal/querynodev2/segments TestFlushData* (SegmentBasePath under suite.rootPath)
 internal/querynodev2/segments/TestSegmentLoader/
+
+# Local Go and C++ server coverage captured from E2E runs
+/artifacts/e2e-server-coverage-*/
