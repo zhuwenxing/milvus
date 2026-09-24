@@ -8,7 +8,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/coverage"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/milvus-io/milvus/internal/util/initcore"
 	"github.com/milvus-io/milvus/pkg/v3/mlog"
@@ -53,11 +55,17 @@ func writeServerCoverage() {
 	}
 	if err := coverage.WriteMetaDir(goDir); err != nil {
 		mlog.Error(ctx, "write Go coverage metadata failed", mlog.Err(err))
+		return
 	}
 	if err := coverage.WriteCountersDir(goDir); err != nil {
 		mlog.Error(ctx, "write Go coverage counters failed", mlog.Err(err))
+		return
 	}
 	initcore.DumpMilvusCoreCoverage()
+	if err := writeCoverageMarker("snapshot.done"); err != nil {
+		mlog.Error(ctx, "write server coverage snapshot marker failed", mlog.Err(err))
+		return
+	}
 	mlog.Info(ctx, "server coverage snapshot written", mlog.String("directory", coverageRoot))
 }
 
@@ -65,7 +73,24 @@ func resetServerCoverage() {
 	ctx := context.TODO()
 	if err := coverage.ClearCounters(); err != nil {
 		mlog.Error(ctx, "reset Go coverage counters failed", mlog.Err(err))
+		return
 	}
 	initcore.ResetMilvusCoreCoverage()
+	if err := writeCoverageMarker("reset.done"); err != nil {
+		mlog.Error(ctx, "write server coverage reset marker failed", mlog.Err(err))
+		return
+	}
 	mlog.Info(ctx, "server coverage counters reset")
+}
+
+func writeCoverageMarker(name string) error {
+	if err := os.MkdirAll(coverageRoot, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(coverageRoot, name)
+	temporaryPath := path + ".tmp"
+	if err := os.WriteFile(temporaryPath, []byte(strconv.FormatInt(time.Now().UnixNano(), 10)), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
