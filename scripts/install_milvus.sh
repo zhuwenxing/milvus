@@ -25,6 +25,12 @@ cp $PWD"/internal/core/output/lib/"*.so* "$LIBRARY_PATH" || true
 cp $PWD"/internal/core/output/lib64/"*.so* "$LIBRARY_PATH" 2>/dev/null || true
 cp -r $PWD"/internal/core/output/lib/ossl-modules" "$LIBRARY_PATH" 2>/dev/null || true
 
+for coverage_artifact in milvus-e2e-gcno.tar.gz milvus-e2e-gcov; do
+    if [ -f "$PWD/internal/core/output/lib/$coverage_artifact" ]; then
+        cp "$PWD/internal/core/output/lib/$coverage_artifact" "$LIBRARY_PATH/"
+    fi
+done
+
 for LIB_PATH in $(ldd ./bin/milvus | grep -E '(asan|atomic)' | awk '{print $3}'); do
     cp "$LIB_PATH" "$LIBRARY_PATH" 2>/dev/null
 done
