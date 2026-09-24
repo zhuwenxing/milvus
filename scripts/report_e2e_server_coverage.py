@@ -30,7 +30,12 @@ def compact_ranges(numbers):
 
 def read_go(profile):
     files = defaultdict(
-        lambda: {"covered_statements": 0, "total_statements": 0, "covered_blocks": []}
+        lambda: {
+            "covered_statements": 0,
+            "total_statements": 0,
+            "executable_blocks": [],
+            "covered_blocks": [],
+        }
     )
     for line in profile.read_text().splitlines():
         if line.startswith("mode:"):
@@ -46,14 +51,14 @@ def read_go(profile):
         entry = files[path.removeprefix(GO_PREFIX)]
         statement_count = int(statements)
         entry["total_statements"] += statement_count
+        block = {
+            "start": [int(start_line), int(start_col)],
+            "end": [int(end_line), int(end_col)],
+        }
+        entry["executable_blocks"].append(block)
         if int(hits) > 0:
             entry["covered_statements"] += statement_count
-            entry["covered_blocks"].append(
-                {
-                    "start": [int(start_line), int(start_col)],
-                    "end": [int(end_line), int(end_col)],
-                }
-            )
+            entry["covered_blocks"].append(block)
     return dict(files)
 
 
@@ -76,6 +81,7 @@ def read_cpp(json_dir):
                     entry["covered_lines"].add(number)
     return {
         path: {
+            "executable_lines": compact_ranges(entry["executable_lines"]),
             "covered_lines": compact_ranges(entry["covered_lines"]),
             "covered_line_count": len(entry["covered_lines"]),
             "executable_line_count": len(entry["executable_lines"]),
@@ -90,6 +96,10 @@ def main():
     parser.add_argument("--go-profile", type=Path, required=True)
     parser.add_argument("--cpp-json-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--server-commit")
+    parser.add_argument("--image")
+    parser.add_argument("--test-task-id")
+    parser.add_argument("--test-status")
     args = parser.parse_args()
 
     go_files = read_go(args.go_profile)
@@ -98,7 +108,16 @@ def main():
         raise SystemExit("both Go and C++ coverage data are required")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    result = {"case_id": args.case_id, "go": go_files, "cpp": cpp_files}
+    result = {
+        "schema_version": 1,
+        "case_id": args.case_id,
+        "server_commit": args.server_commit,
+        "image": args.image,
+        "test_task_id": args.test_task_id,
+        "test_status": args.test_status,
+        "go": go_files,
+        "cpp": cpp_files,
+    }
     (args.output_dir / "coverage-map.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
