@@ -28,7 +28,10 @@ def command(argv, *, env=None, input_text=None, check=True):
         check=False,
     )
     if check and result.returncode:
-        raise RuntimeError(f"{' '.join(argv)} failed: {result.stderr or result.stdout}")
+        raise RuntimeError(
+            f"{' '.join(argv)} failed: stderr={result.stderr[-2000:]!r}; "
+            f"stdout={result.stdout[-2000:]!r}"
+        )
     return result
 
 
@@ -163,6 +166,14 @@ def copy_from_pod(env, namespace, pod, remote, local):
 def collect(env, namespace, pod, output_dir):
     kubectl(env, namespace, pod, "sh", "-c", 'kill -USR1 "$(pidof milvus)"')
     wait_marker(env, namespace, pod, "snapshot.done")
+    kubectl(
+        env,
+        namespace,
+        pod,
+        "cp",
+        "/milvus/lib/milvus-e2e-gcno.tar.gz",
+        f"{COVERAGE_ROOT}/milvus-e2e-gcno.tar.gz",
+    )
     script = (REPO / "scripts/prepare_e2e_cpp_gcov.sh").read_text()
     kubectl(
         env,
