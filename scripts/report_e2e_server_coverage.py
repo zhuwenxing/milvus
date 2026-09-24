@@ -94,7 +94,14 @@ def read_cpp(json_dir):
             path = source.get("file", "")
             if CPP_PREFIX not in path:
                 continue
-            entry = files["internal/core/src/" + path.split(CPP_PREFIX, 1)[1]]
+            source_path = "internal/core/src/" + path.split(CPP_PREFIX, 1)[1]
+            if source_path.startswith("internal/core/src/pb/"):
+                continue
+            if not (REPO / source_path).is_file():
+                raise ValueError(
+                    f"C++ profile source does not exist in checkout: {source_path}"
+                )
+            entry = files[source_path]
             for line in source.get("lines", []):
                 number = line.get("line_number", 0)
                 if number <= 0:
