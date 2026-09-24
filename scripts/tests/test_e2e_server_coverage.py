@@ -6,10 +6,30 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from report_e2e_server_coverage import go_module_roots, go_source_path
 from select_e2e_server_cases import changed_lines, select_cases
 
 
 class E2EServerCoverageSelectionTest(unittest.TestCase):
+    def test_module_versions_map_to_checkout_paths(self):
+        modules = go_module_roots()
+        for import_path, expected in [
+            (
+                "github.com/milvus-io/milvus/pkg/v3/util/merr/errors.go",
+                "pkg/util/merr/errors.go",
+            ),
+            (
+                "github.com/milvus-io/milvus/client/v3/column/array.go",
+                "client/column/array.go",
+            ),
+            (
+                "github.com/milvus-io/milvus/internal/proxy/task.go",
+                "internal/proxy/task.go",
+            ),
+        ]:
+            with self.subTest(import_path=import_path):
+                self.assertEqual(go_source_path(import_path, modules), expected)
+
     def test_diff_counts_only_added_lines_in_new_revision(self):
         diff = """diff --git a/internal/proxy/task.go b/internal/proxy/task.go
 --- a/internal/proxy/task.go

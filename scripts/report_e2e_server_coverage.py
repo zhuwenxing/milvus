@@ -10,6 +10,25 @@ from pathlib import Path
 GO_BLOCK = re.compile(r"^(.+):(\d+)\.(\d+),(\d+)\.(\d+) (\d+) (\d+)$")
 GO_PREFIX = "github.com/milvus-io/milvus/"
 CPP_PREFIX = "/internal/core/src/"
+REPO = Path(__file__).resolve().parent.parent
+
+
+def go_module_roots():
+    modules = []
+    for directory in ("pkg", "client", ""):
+        content = (REPO / directory / "go.mod").read_text()
+        module = re.search(r"^module\s+(\S+)", content, re.MULTILINE).group(1)
+        modules.append((module, directory))
+    return sorted(modules, key=lambda item: len(item[0]), reverse=True)
+
+
+def go_source_path(import_path, modules):
+    """Resolve module-version import prefixes to actual repository paths."""
+    for module, directory in modules:
+        prefix = module + "/"
+        if import_path.startswith(prefix):
+            return str(Path(directory) / import_path.removeprefix(prefix))
+    raise ValueError(f"unknown Milvus Go module in profile: {import_path}")
 
 
 def compact_ranges(numbers):
@@ -29,6 +48,7 @@ def compact_ranges(numbers):
 
 
 def read_go(profile):
+    modules = go_module_roots()
     files = defaultdict(
         lambda: {
             "covered_statements": 0,
@@ -48,7 +68,10 @@ def read_go(profile):
         )
         if not path.startswith(GO_PREFIX):
             continue
-        entry = files[path.removeprefix(GO_PREFIX)]
+        source = go_source_path(path, modules)
+        if not (REPO / source).is_file():
+            raise ValueError(f"Go profile source does not exist in checkout: {source}")
+        entry = files[source]
         statement_count = int(statements)
         entry["total_statements"] += statement_count
         block = {
