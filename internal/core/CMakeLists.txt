@@ -371,11 +371,13 @@ endif ()
 config_summary()
 
 # **************************** Source files ****************************
-if ( BUILD_UNIT_TEST STREQUAL "ON" AND BUILD_COVERAGE STREQUAL "ON" )
+if ( BUILD_COVERAGE STREQUAL "ON" )
     append_flags( CMAKE_CXX_FLAGS
                   FLAGS
                         "-fprofile-arcs"
                         "-ftest-coverage"
+                        "-fprofile-update=atomic"
+                        "-DMILVUS_E2E_COVERAGE"
                         )
     # Also add coverage flags to linker (required on macOS with Clang)
     append_flags( CMAKE_EXE_LINKER_FLAGS

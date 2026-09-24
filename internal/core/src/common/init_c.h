@@ -25,6 +25,11 @@ extern "C" {
 
 #include "common/type_c.h"
 
+#ifdef MILVUS_E2E_COVERAGE
+void DumpMilvusCoreCoverage(void);
+void ResetMilvusCoreCoverage(void);
+#endif
+
 void
 InitCpuNum(const int);
 

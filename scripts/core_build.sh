@@ -348,3 +348,14 @@ then
 fi
 
 popd
+
+if [[ "${BUILD_COVERAGE}" == "ON" && "${BUILD_UNITTEST}" == "OFF" ]]; then
+  coverage_dir="${INSTALL_PREFIX}/lib"
+  mkdir -p "${coverage_dir}"
+  (
+    cd "${ROOT_DIR}" || exit 1
+    find cmake_build/src -name '*.gcno' -print0 |
+      tar --null -czf "${coverage_dir}/milvus-e2e-gcno.tar.gz" -T -
+  ) || exit 1
+  cp "$(command -v gcov)" "${coverage_dir}/milvus-e2e-gcov" || exit 1
+fi

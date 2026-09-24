@@ -418,6 +418,9 @@ func (mr *MilvusRoles) componentNum() int {
 
 // Run Milvus components.
 func (mr *MilvusRoles) Run() {
+	stopCoverageSignals := startCoverageSignalHandler()
+	defer stopCoverageSignals()
+
 	// start signal handler, defer close func
 	closeFn := mr.handleSignals()
 	defer closeFn()

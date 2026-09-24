@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <exception>
 #include <mutex>
 #include <string>
@@ -38,6 +39,23 @@
 #include "segcore/storagev2translator/GroupCTMeta.h"
 #include "segcore/storagev2translator/StorageV2Config.h"
 #include "storage/ThreadPool.h"
+
+#ifdef MILVUS_E2E_COVERAGE
+extern "C" void __gcov_dump(void);
+extern "C" void __gcov_reset(void);
+
+void
+DumpMilvusCoreCoverage(void) {
+    ::setenv("GCOV_PREFIX", "/tmp/milvus-e2e-coverage/cpp", 1);
+    ::setenv("GCOV_PREFIX_STRIP", "2", 1);
+    __gcov_dump();
+}
+
+void
+ResetMilvusCoreCoverage(void) {
+    __gcov_reset();
+}
+#endif
 
 std::once_flag traceFlag;
 std::once_flag cpuNumFlag;

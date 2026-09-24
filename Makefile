@@ -19,7 +19,7 @@ OBJPREFIX := "github.com/milvus-io/milvus/cmd/milvus"
 # plugins loaded by Milvus must use the same tag and linker flag.
 SONIC_PLUGIN_SYNC_TAG := bytedance_tango
 SONIC_PLUGIN_SYNC_LDFLAG := -checklinkname=0
-MILVUS_GO_BUILD_TAGS := dynamic,sonic,with_jemalloc,$(SONIC_PLUGIN_SYNC_TAG)
+MILVUS_GO_BUILD_TAGS := dynamic,sonic,with_jemalloc,$(SONIC_PLUGIN_SYNC_TAG),e2e_coverage
 
 INSTALL_PATH := $(PWD)/bin
 LIBRARY_PATH := $(PWD)/lib
@@ -128,7 +128,8 @@ build-go:
 	@echo "Building Milvus ..."
 	@source $(PWD)/scripts/setenv.sh && \
 		mkdir -p $(INSTALL_PATH) && go env -w CGO_ENABLED="1" && \
-		$(GOEXPERIMENT_FLAG) CGO_LDFLAGS="$(CGO_LDFLAGS)" CGO_CFLAGS="$(CGO_CFLAGS)" GO111MODULE=on $(GO) build -pgo=$(PGO_PATH)/default.pgo -ldflags="$(SONIC_PLUGIN_SYNC_LDFLAG) -r $${RPATH} -X '$(OBJPREFIX).BuildTags=$(BUILD_TAGS)' -X '$(OBJPREFIX).BuildTime=$(BUILD_TIME)' -X '$(OBJPREFIX).GitCommit=$(GIT_COMMIT)' -X '$(OBJPREFIX).GoVersion=$(GO_VERSION)' -X '$(OBJPREFIX).MilvusVersion=$(MILVUS_VERSION)'" \
+		coverpkgs=$$(GO111MODULE=on $(GO) list -deps -tags "$(MILVUS_GO_BUILD_TAGS)" -f '{{.ImportPath}}' ./cmd | grep '^github.com/milvus-io/milvus/' | paste -sd, -) && \
+		$(GOEXPERIMENT_FLAG) CGO_LDFLAGS="$(CGO_LDFLAGS)" CGO_CFLAGS="$(CGO_CFLAGS)" GO111MODULE=on $(GO) build -cover -covermode=atomic -coverpkg="$${coverpkgs}" -pgo=$(PGO_PATH)/default.pgo -ldflags="$(SONIC_PLUGIN_SYNC_LDFLAG) -r $${RPATH} -X '$(OBJPREFIX).BuildTags=$(BUILD_TAGS)' -X '$(OBJPREFIX).BuildTime=$(BUILD_TIME)' -X '$(OBJPREFIX).GitCommit=$(GIT_COMMIT)' -X '$(OBJPREFIX).GoVersion=$(GO_VERSION)' -X '$(OBJPREFIX).MilvusVersion=$(MILVUS_VERSION)'" \
 		-tags "$(MILVUS_GO_BUILD_TAGS)" -o $(INSTALL_PATH)/milvus $(PWD)/cmd/main.go 1>/dev/null
 
 milvus-gpu: build-cpp-gpu print-gpu-build-info
@@ -338,7 +339,7 @@ check-segcore-codes-product: generate-segcore-codes
 
 build-cpp: generated-proto plan-parser-lib
 	@echo "Building Milvus cpp library ..."
-	@(env bash $(PWD)/scripts/core_build.sh -t ${mode} -a ${use_asan} -n ${use_disk_index} -y ${use_dynamic_simd} ${AZURE_OPTION} -x ${index_engine} -f $(tantivy_features) -S ${use_svs} -R ${with_crt})
+	@(env bash $(PWD)/scripts/core_build.sh -t ${mode} -a ${use_asan} -c -n ${use_disk_index} -y ${use_dynamic_simd} ${AZURE_OPTION} -x ${index_engine} -f $(tantivy_features) -S ${use_svs} -R ${with_crt})
 
 build-cpp-gpu: generated-proto plan-parser-lib
 	@echo "Building Milvus cpp gpu library ... "
