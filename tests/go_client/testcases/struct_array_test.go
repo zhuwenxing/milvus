@@ -1255,10 +1255,18 @@ func TestStructArrayPartialUpdatePreservesOmittedStruct(t *testing.T) {
 				require.Equal(t, id, gotID)
 				gotVector, err := rs.GetColumn("normal_vector").Get(i)
 				require.NoError(t, err)
-				require.Equal(t, vectors[i], gotVector)
+				require.Equal(t, entity.FloatVector(vectors[i]), gotVector)
 				gotClips, err := rs.GetColumn("clips").Get(i)
 				require.NoError(t, err)
-				require.Equal(t, clips[i], gotClips)
+				actual := gotClips.(map[string]any)
+				require.Equal(t, clips[i]["scalar_field"], actual["scalar_field"])
+				require.Equal(t, clips[i]["label"], actual["label"])
+				expectedVectors := clips[i]["clip_embedding1"].([][]float32)
+				actualVectors := actual["clip_embedding1"].([]entity.FloatVector)
+				require.Len(t, actualVectors, len(expectedVectors))
+				for j, expectedVector := range expectedVectors {
+					require.Equal(t, entity.FloatVector(expectedVector), actualVectors[j])
+				}
 			}
 		})
 	}
