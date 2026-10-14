@@ -4137,6 +4137,36 @@ class TestMilvusClientStructArrayQuery(TestMilvusClientV2Base):
         page2_ids = {result["id"] for result in results_page2}
         assert page1_ids.isdisjoint(page2_ids)
 
+    @pytest.mark.tags(CaseLabel.L1)
+    @pytest.mark.parametrize(
+        "expr,offset,expected_count",
+        [("id >= 0", 3, 1), ("id >= 0", 4, 0), ("id >= 0", 5, 0), ("id < 0", 0, 0)],
+        ids=["last_row", "at_end", "past_end", "no_match"],
+    )
+    def test_query_struct_array_empty_page(self, expr, offset, expected_count):
+        """
+        target: verify empty pagination results containing struct vector subfields decode successfully
+        method: query the last row, the end, past the end, and a filter with no matches
+        expected: matching rows or an empty list are returned without decoding errors
+        """
+        client = self._client()
+        collection_name = cf.gen_unique_str(f"{prefix}_empty_page")
+        self.create_collection_with_data(client, collection_name, nb=4)
+        rows = self.query(
+            client,
+            collection_name,
+            filter=expr,
+            output_fields=["id", "normal_vector", "clips"],
+            limit=4,
+            offset=offset,
+            consistency_level="Strong",
+        )[0]
+        assert len(rows) == expected_count
+        if expected_count:
+            assert rows[0]["id"] == 3
+            assert rows[0]["clips"]
+            assert len(rows[0]["clips"][0]["clip_embedding1"]) == default_dim
+
 
 class TestMilvusClientStructArrayCRUD(TestMilvusClientV2Base):
     """Test case of struct array CRUD operations"""
@@ -4168,6 +4198,80 @@ class TestMilvusClientStructArrayCRUD(TestMilvusClientV2Base):
         res, check = self.create_collection(client, collection_name, schema=schema)
         assert check
         return schema
+
+    @pytest.mark.tags(CaseLabel.L1)
+    @pytest.mark.parametrize("stage", ["flushed", "new_insert"])
+    def test_partial_update_preserves_omitted_struct_array(self, stage):
+        """
+        target: verify partial updates inherit an omitted struct array including its vectors
+        method: update only the ordinary vector for a flushed row or a row inserted after loading
+        expected: the ordinary vector changes, all struct elements and other rows stay unchanged
+        """
+        client = self._client()
+        collection_name = cf.gen_unique_str(f"{prefix}_partial_update")
+        self.create_collection_with_schema(client, collection_name)
+
+        def vector(seed):
+            return [((seed + i) % 16 + 1) / 16 for i in range(default_dim)]
+
+        data = [
+            {
+                "id": i,
+                "normal_vector": vector(i),
+                "clips": [
+                    {
+                        "clip_embedding1": vector(i + 4 + j * 4),
+                        "scalar_field": i * 10 + j,
+                        "label": f"row_{i}_{j}",
+                    }
+                    for j in range(2)
+                ],
+            }
+            for i in range(4)
+        ]
+        self.insert(client, collection_name, data)
+        self.flush(client, collection_name)
+        index_params = client.prepare_index_params()
+        index_params.add_index("normal_vector", index_type="HNSW", metric_type="L2", params=INDEX_PARAMS)
+        index_params.add_index(
+            "clips[clip_embedding1]", index_type="HNSW", metric_type="MAX_SIM_COSINE", params=INDEX_PARAMS
+        )
+        self.create_index(client, collection_name, index_params)
+        self.load_collection(client, collection_name)
+
+        target = data[0]
+        if stage == "new_insert":
+            target = {"id": 100, "normal_vector": vector(10), "clips": data[0]["clips"]}
+            self.insert(client, collection_name, [target])
+            data.append(target)
+
+        updated = vector(15)
+        res = self.upsert(
+            client,
+            collection_name,
+            [{"id": target["id"], "normal_vector": updated}],
+            partial_update=True,
+        )[0]
+        assert res["upsert_count"] == 1
+        expected = [{**row, "normal_vector": updated} if row["id"] == target["id"] else row for row in data]
+        rows = self.query(
+            client,
+            collection_name,
+            filter="id >= 0",
+            output_fields=["id", "normal_vector", "clips"],
+            consistency_level="Strong",
+        )[0]
+        assert len(rows) == len(expected)
+        by_id = {row["id"]: row for row in rows}
+        assert set(by_id) == {row["id"] for row in expected}
+        for row in expected:
+            actual = by_id[row["id"]]
+            np.testing.assert_allclose(actual["normal_vector"], row["normal_vector"])
+            assert len(actual["clips"]) == len(row["clips"])
+            for actual_clip, expected_clip in zip(actual["clips"], row["clips"]):
+                assert actual_clip["scalar_field"] == expected_clip["scalar_field"]
+                assert actual_clip["label"] == expected_clip["label"]
+                np.testing.assert_allclose(actual_clip["clip_embedding1"], expected_clip["clip_embedding1"])
 
     @pytest.mark.tags(CaseLabel.L0)
     def test_upsert_struct_array_data(self):

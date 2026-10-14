@@ -1131,6 +1131,139 @@ func TestStructArrayQuerySpecificFields(t *testing.T) {
 	require.NotNil(t, rs.GetColumn("clips"))
 }
 
+// TestStructArrayQueryEmptyPage checks empty pagination with vector subfields in the output.
+func TestStructArrayQueryEmptyPage(t *testing.T) {
+	ctx := hp.CreateContext(t, time.Second*common.DefaultTimeout)
+	mc := hp.CreateDefaultMilvusClient(ctx, t)
+	collName, _, _ := canonicalStructArrayCollection(t, ctx, mc, 4)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		common.CheckErr(t, mc.DropCollection(cleanupCtx, client.NewDropCollectionOption(collName)), true)
+	})
+
+	for _, tc := range []struct {
+		name   string
+		filter string
+		offset int
+		rows   int
+	}{
+		{"last_row", "id >= 0", 3, 1},
+		{"at_end", "id >= 0", 4, 0},
+		{"past_end", "id >= 0", 5, 0},
+		{"no_match", "id < 0", 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rs, err := mc.Query(ctx, client.NewQueryOption(collName).
+				WithFilter(tc.filter).WithOffset(tc.offset).WithLimit(4).
+				WithOutputFields("id", "normal_vector", "clips").
+				WithConsistencyLevel(entity.ClStrong))
+			common.CheckErr(t, err, true)
+			require.Equal(t, tc.rows, rs.ResultCount)
+			for _, field := range []string{"id", "normal_vector", "clips"} {
+				require.NotNil(t, rs.GetColumn(field))
+				require.Equal(t, tc.rows, rs.GetColumn(field).Len())
+			}
+		})
+	}
+}
+
+// TestStructArrayPartialUpdatePreservesOmittedStruct checks inheritance for flushed and newly inserted rows.
+func TestStructArrayPartialUpdatePreservesOmittedStruct(t *testing.T) {
+	for _, stage := range []string{"flushed", "new_insert"} {
+		t.Run(stage, func(t *testing.T) {
+			ctx := hp.CreateContext(t, time.Second*common.DefaultTimeout)
+			mc := hp.CreateDefaultMilvusClient(ctx, t)
+			collName, structSchema, _ := crudCollection(t, ctx, mc)
+			t.Cleanup(func() {
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				common.CheckErr(t, mc.DropCollection(cleanupCtx, client.NewDropCollectionOption(collName)), true)
+			})
+			dim := hp.StructArrayDefaultDim
+			vector := func(seed int) []float32 {
+				v := make([]float32, dim)
+				for i := range dim {
+					v[i] = float32((seed+i)%16+1) / 16
+				}
+				return v
+			}
+			ids := []int64{0, 1, 2, 3}
+			vectors := make([][]float32, len(ids))
+			clips := make([]map[string]any, len(ids))
+			for i, id := range ids {
+				vectors[i] = vector(i)
+				clips[i] = map[string]any{
+					"clip_embedding1": [][]float32{vector(i + 4), vector(i + 8)},
+					"scalar_field":    []int64{id * 10, id*10 + 1},
+					"label":           []string{fmt.Sprintf("row_%d_first", id), fmt.Sprintf("row_%d_second", id)},
+				}
+			}
+			_, err := mc.Insert(ctx, client.NewColumnBasedInsertOption(collName).
+				WithInt64Column("id", ids).
+				WithFloatVectorColumn("normal_vector", dim, vectors).
+				WithStructArrayColumn("clips", structSchema, clips))
+			common.CheckErr(t, err, true)
+			flushTask, err := mc.Flush(ctx, client.NewFlushOption(collName))
+			common.CheckErr(t, err, true)
+			common.CheckErr(t, flushTask.Await(ctx), true)
+			for _, field := range []string{"normal_vector", "clips[clip_embedding1]"} {
+				metric := entity.L2
+				if field != "normal_vector" {
+					metric = entity.MaxSimCosine
+				}
+				indexTask, err := mc.CreateIndex(ctx, client.NewCreateIndexOption(collName, field,
+					index.NewHNSWIndex(metric, 16, 200)))
+				common.CheckErr(t, err, true)
+				common.CheckErr(t, indexTask.Await(ctx), true)
+			}
+			loadTask, err := mc.LoadCollection(ctx, client.NewLoadCollectionOption(collName))
+			common.CheckErr(t, err, true)
+			common.CheckErr(t, loadTask.Await(ctx), true)
+
+			if stage == "new_insert" {
+				ids = append(ids, 100)
+				vectors = append(vectors, vector(10))
+				clips = append(clips, clips[0])
+				_, err = mc.Insert(ctx, client.NewColumnBasedInsertOption(collName).
+					WithInt64Column("id", ids[4:]).
+					WithFloatVectorColumn("normal_vector", dim, vectors[4:]).
+					WithStructArrayColumn("clips", structSchema, clips[4:]))
+				common.CheckErr(t, err, true)
+			}
+			target := 0
+			if stage == "new_insert" {
+				target = 4
+			}
+			updated := vector(15)
+			res, err := mc.Upsert(ctx, client.NewColumnBasedInsertOption(collName).
+				WithInt64Column("id", []int64{ids[target]}).
+				WithFloatVectorColumn("normal_vector", dim, [][]float32{updated}).
+				WithPartialUpdate(true))
+			common.CheckErr(t, err, true)
+			require.EqualValues(t, 1, res.UpsertCount)
+			vectors[target] = updated
+
+			rs, err := mc.Query(ctx, client.NewQueryOption(collName).
+				WithFilter("id >= 0").WithOutputFields("id", "normal_vector", "clips").
+				WithConsistencyLevel(entity.ClStrong))
+			common.CheckErr(t, err, true)
+			require.Equal(t, len(ids), rs.ResultCount)
+			for i, id := range ids {
+				gotID, err := rs.GetColumn("id").Get(i)
+				require.NoError(t, err)
+				require.Equal(t, id, gotID)
+				gotVector, err := rs.GetColumn("normal_vector").Get(i)
+				require.NoError(t, err)
+				require.Equal(t, vectors[i], gotVector)
+				gotClips, err := rs.GetColumn("clips").Get(i)
+				require.NoError(t, err)
+				require.Equal(t, clips[i], gotClips)
+			}
+		})
+	}
+}
+
 // TestStructArrayUpsertData ports test_upsert_struct_array_data.
 // Scaled-down: 200 flushed + 100 growing + 5 upsert per segment, vs python's 2000 + 1000 + 10.
 func TestStructArrayUpsertData(t *testing.T) {
