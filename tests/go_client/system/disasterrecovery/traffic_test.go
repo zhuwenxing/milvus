@@ -274,12 +274,6 @@ func (l *traffic) start() {
 					due := int64((l.e.now() - started) * qps)
 					for sequence < due {
 						when := started + float64(sequence+1)*interval
-						if sequence+1 < due {
-							now := l.e.now()
-							l.add(sample{Operation: op, Start: now, End: now, Scheduled: when, Correct: true, Error: "load_generator_schedule_lag"})
-							sequence++
-							continue
-						}
 						select {
 						case jobs <- request{sequence, when}:
 						default:
