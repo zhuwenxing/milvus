@@ -239,7 +239,7 @@ func TestSingleFaultRecovery(t *testing.T) {
 	require.NoError(t, e.traffic.verify(ctx))
 	ready, err = e.topology(ctx, "final")
 	require.NoError(t, err)
-	t.Logf("observation budget ended: service recovery observed=%t, replica topology ready=%t; no SLA threshold applied", measured, ready)
+	t.Logf("observation budget ended: service recovery observed=%t, all observed pods and replica metadata ready=%t; no SLA threshold applied", measured, ready)
 }
 
 func wait(ctx context.Context, duration time.Duration) error {

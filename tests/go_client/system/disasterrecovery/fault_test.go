@@ -163,9 +163,11 @@ func (e *experiment) topology(ctx context.Context, suffix string) (bool, error) 
 		ready = false
 	}
 	var compliance any
+	replicaMetadataReady, podsReady := ready, len(pods) > 0
 	for _, p := range pods {
 		if !hasCondition(p.Status.Conditions, "Ready") {
 			ready = false
+			podsReady = false
 		}
 		if p.Metadata.Labels["component"] == "mixcoord" && p.Status.PodIP != "" {
 			// This is configuration convergence, not a general durability audit.
@@ -191,7 +193,7 @@ func (e *experiment) topology(ctx context.Context, suffix string) (bool, error) 
 			}
 		}
 	}
-	return ready, writeJSON(filepath.Join(e.cfg.Output, "topology-"+suffix+".json"), map[string]any{"elapsed": e.now(), "replicas": replicas, "resource_groups": resourceGroups, "pods": pods, "replica_config_compliance": compliance, "topology_ready": ready})
+	return ready, writeJSON(filepath.Join(e.cfg.Output, "topology-"+suffix+".json"), map[string]any{"elapsed": e.now(), "replicas": replicas, "resource_groups": resourceGroups, "pods": pods, "replica_config_compliance": compliance, "replica_metadata_ready": replicaMetadataReady, "pods_ready": podsReady, "topology_ready": ready})
 }
 
 func managementJSON(ctx context.Context, endpoint string) map[string]any {
