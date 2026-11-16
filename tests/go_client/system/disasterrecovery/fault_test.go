@@ -21,6 +21,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -105,6 +107,11 @@ func (e *experiment) topology(ctx context.Context, suffix string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
+	// Capture WAL observations independently before SDK topology calls, which may
+	// time out during the fault. Registration state is not an RPC health verdict.
+	if err := e.observeStreaming(ctx, pods, suffix); err != nil {
+		return false, err
+	}
 	replicas, err := e.client.DescribeReplica(ctx, milvusclient.NewDescribeReplicaOption(e.collection))
 	if err != nil {
 		return false, err
@@ -185,6 +192,66 @@ func (e *experiment) topology(ctx context.Context, suffix string) (bool, error) 
 		}
 	}
 	return ready, writeJSON(filepath.Join(e.cfg.Output, "topology-"+suffix+".json"), map[string]any{"elapsed": e.now(), "replicas": replicas, "resource_groups": resourceGroups, "pods": pods, "replica_config_compliance": compliance, "topology_ready": ready})
+}
+
+func managementJSON(ctx context.Context, endpoint string) map[string]any {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	response, err := (&http.Client{Timeout: 2 * time.Second}).Do(request)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	result := map[string]any{"http_status": response.StatusCode}
+	if err != nil {
+		result["error"] = err.Error()
+	} else if !json.Valid(body) {
+		result["error"] = "non-JSON or oversized management response"
+	} else {
+		result["body"] = json.RawMessage(body)
+	}
+	return result
+}
+
+func (e *experiment) observeStreaming(ctx context.Context, pods []pod, suffix string) error {
+	observations := []map[string]any{}
+	for _, coordinator := range pods {
+		if coordinator.Metadata.Labels["component"] != "mixcoord" || coordinator.Status.PodIP == "" {
+			continue
+		}
+		endpoint := "http://" + net.JoinHostPort(coordinator.Status.PodIP, "9091")
+		listing := managementJSON(ctx, endpoint+"/management/streaming/nodes")
+		observation := map[string]any{"coordinator": coordinator.Metadata.Name, "listing": listing}
+		var nodes struct {
+			Nodes []struct {
+				ID      int64  `json:"ID"`
+				Address string `json:"address"`
+				State   string `json:"state"`
+			} `json:"nodeInfos"`
+		}
+		if body, ok := listing["body"].(json.RawMessage); ok && listing["http_status"] == http.StatusOK && json.Unmarshal(body, &nodes) == nil {
+			placements := []map[string]any{}
+			for _, node := range nodes.Nodes {
+				host, _, splitErr := net.SplitHostPort(node.Address)
+				placement := map[string]any{"node_id": node.ID, "registration_state": node.State, "resource_group": nil}
+				for _, p := range pods {
+					if splitErr == nil && p.Metadata.Labels["component"] == "streamingnode" && p.Status.PodIP == host {
+						placement["resource_group"] = p.Metadata.Labels["milvus.io/resource-group"]
+						placement["pod"] = p.Metadata.Name
+						placement["uid"] = p.Metadata.UID
+					}
+				}
+				placement["confirmed_assignments"] = managementJSON(ctx, fmt.Sprintf("%s/management/streaming/nodes/distribution?node_id=%d", endpoint, node.ID))
+				placements = append(placements, placement)
+			}
+			observation["placements"] = placements
+		}
+		observations = append(observations, observation)
+	}
+	return writeJSON(filepath.Join(e.cfg.Output, "wal-"+suffix+".json"), map[string]any{"elapsed": e.now(), "observations": observations, "interpretation": "Registration active is not RPC health. Distribution lists confirmed ASSIGNED channels only; missing/unsupported responses are unavailable observations."})
 }
 
 func hasCondition(conditions []condition, name string) bool {
