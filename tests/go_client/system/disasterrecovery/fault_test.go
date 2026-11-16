@@ -111,12 +111,16 @@ func (e *experiment) topology(ctx context.Context, suffix string) (bool, error) 
 	}
 	ready := len(pods) > 0 && len(replicas) == len(e.cfg.Groups)
 	resourceGroups := map[string]*entity.ResourceGroup{}
+	queryNodeGroups := map[int64]string{}
 	for _, group := range e.cfg.Groups {
 		rg, rgErr := e.client.DescribeResourceGroup(ctx, milvusclient.NewDescribeResourceGroupOption(group))
 		if rgErr != nil {
 			return false, rgErr
 		}
 		resourceGroups[group] = rg
+		for _, node := range rg.Nodes {
+			queryNodeGroups[node.NodeID] = group
+		}
 		if rg.NumAvailableNode == 0 || len(rg.Nodes) == 0 {
 			ready = false
 		}
@@ -127,12 +131,19 @@ func (e *experiment) topology(ctx context.Context, suffix string) (bool, error) 
 		if len(replica.Nodes) == 0 || len(replica.Shards) == 0 {
 			ready = false
 		}
-		if rg := resourceGroups[replica.ResourceGroupName]; rg != nil {
-			for _, node := range replica.Nodes {
-				if !slices.ContainsFunc(rg.Nodes, func(n entity.NodeInfo) bool { return n.NodeID == node }) {
+		// DescribeReplica also includes streaming/WAL-serving nodes. The RG API's
+		// membership list describes QueryNodes, so compare only known QueryNodes.
+		queryNodes := 0
+		for _, node := range replica.Nodes {
+			if group, knownQueryNode := queryNodeGroups[node]; knownQueryNode {
+				queryNodes++
+				if group != replica.ResourceGroupName {
 					ready = false
 				}
 			}
+		}
+		if queryNodes == 0 {
+			ready = false
 		}
 		for _, shard := range replica.Shards {
 			if shard.ShardLeader == 0 || len(shard.ShardNodes) == 0 {
