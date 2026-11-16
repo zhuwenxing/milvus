@@ -29,7 +29,9 @@ import (
 
 type operationStats struct {
 	Scheduled     int      `json:"scheduled"`
-	Sent          int      `json:"sent"`
+	Dispatched    int      `json:"dispatched"`
+	Completed     int      `json:"completed_logical_operations"`
+	Sent          int      `json:"completed_rpc_calls"`
 	Succeeded     int      `json:"succeeded"`
 	Dropped       int      `json:"generator_dropped"`
 	SuccessRate   *float64 `json:"rpc_success_rate"`
@@ -50,7 +52,7 @@ func quantile(values []float64, q float64) *float64 {
 }
 
 func stats(rows []sample, seconds float64) operationStats {
-	result := operationStats{Scheduled: len(rows)}
+	result := operationStats{Completed: len(rows)}
 	latencies, delays := []float64{}, []float64{}
 	for _, r := range rows {
 		if r.Sent {
@@ -74,6 +76,27 @@ func stats(rows []sample, seconds float64) operationStats {
 	if seconds > 0 {
 		result.SuccessfulRPS = float64(result.Succeeded) / seconds
 	}
+	return result
+}
+
+// Arrival, dispatch and completion counters use their own clocks. A slow RPC
+// may be offered in one bucket and finish in another; neither count is lost.
+func windowStats(rows []sample, start, end float64) operationStats {
+	completed := []sample{}
+	offered, dispatched := 0, 0
+	for _, r := range rows {
+		if r.End >= start && r.End < end {
+			completed = append(completed, r)
+		}
+		if r.Scheduled >= start && r.Scheduled < end {
+			offered++
+		}
+		if r.Sent && r.Start >= start && r.Start < end {
+			dispatched++
+		}
+	}
+	result := stats(completed, end-start)
+	result.Scheduled, result.Dispatched = offered, dispatched
 	return result
 }
 
@@ -110,27 +133,11 @@ func (e *experiment) report() (bool, error) {
 	buckets := []metricBucket{}
 	phases := map[string]any{}
 	for op, opRows := range groups {
-		before, during, after := []sample{}, []sample{}, []sample{}
-		for _, r := range opRows {
-			switch {
-			case r.End < t0 && r.Start >= baselineStart:
-				before = append(before, r)
-			case r.Start < removed && r.End >= t0:
-				during = append(during, r)
-			case r.Start >= removed:
-				after = append(after, r)
-			}
-		}
-		phases[op] = map[string]operationStats{"baseline": stats(before, t0-baselineStart), "fault": stats(during, removed-t0), "after_fault": stats(after, ended-removed)}
-		byBucket := map[int][]sample{}
-		for _, r := range opRows {
-			b := int((r.End - baselineStart) / 5)
-			byBucket[b] = append(byBucket[b], r)
-		}
-		for b := 0; float64(b*5) < ended-baselineStart; b++ {
+		phases[op] = map[string]operationStats{"baseline": windowStats(opRows, baselineStart, t0), "fault": windowStats(opRows, t0, removed), "after_fault": windowStats(opRows, removed, ended)}
+		for b := range int(math.Ceil((ended - baselineStart) / 5)) {
 			begin := baselineStart + float64(b*5)
 			end := min(begin+5, ended)
-			buckets = append(buckets, metricBucket{Start: begin, End: end, Operation: op, operationStats: stats(byBucket[b], end-begin)})
+			buckets = append(buckets, metricBucket{Start: begin, End: end, Operation: op, operationStats: windowStats(opRows, begin, end)})
 		}
 	}
 	performance, band := performanceRecovery(buckets, t0, ended, e.cfg.StableSeconds)
@@ -174,7 +181,8 @@ func serviceRecovery(rows []sample, t0, end float64, window int) (*float64, map[
 		}
 	}
 	completeEnd := t0
-	for begin := t0; begin+5 <= end; begin += 5 {
+	for b := range int((end - t0) / 5) {
+		begin := t0 + float64(b*5)
 		success, bad := 0, false
 		for _, r := range rows {
 			if r.End >= begin && r.End < begin+5 {
@@ -255,11 +263,11 @@ func writeCSV(path string, buckets []metricBucket, t0 float64) error {
 	}
 	defer file.Close()
 	writer := csv.NewWriter(file)
-	if err = writer.Write([]string{"seconds_from_fault", "operation", "scheduled", "sent", "succeeded", "generator_dropped", "rpc_success_rate", "p50_s", "p95_s", "p99_s", "successful_rps", "dispatch_p99_s"}); err != nil {
+	if err = writer.Write([]string{"seconds_from_fault", "operation", "scheduled", "dispatched", "completed_logical_operations", "completed_rpc_calls", "succeeded", "generator_dropped", "rpc_success_rate", "p50_s", "p95_s", "p99_s", "successful_rps", "dispatch_p99_s"}); err != nil {
 		return err
 	}
 	for _, b := range buckets {
-		if err = writer.Write([]string{fmt.Sprintf("%.3f", b.Start-t0), b.Operation, strconv.Itoa(b.Scheduled), strconv.Itoa(b.Sent), strconv.Itoa(b.Succeeded), strconv.Itoa(b.Dropped), number(b.SuccessRate), number(b.P50), number(b.P95), number(b.P99), fmt.Sprintf("%.3f", b.SuccessfulRPS), number(b.DispatchP99)}); err != nil {
+		if err = writer.Write([]string{fmt.Sprintf("%.3f", b.Start-t0), b.Operation, strconv.Itoa(b.Scheduled), strconv.Itoa(b.Dispatched), strconv.Itoa(b.Completed), strconv.Itoa(b.Sent), strconv.Itoa(b.Succeeded), strconv.Itoa(b.Dropped), number(b.SuccessRate), number(b.P50), number(b.P95), number(b.P99), fmt.Sprintf("%.3f", b.SuccessfulRPS), number(b.DispatchP99)}); err != nil {
 			return err
 		}
 	}
