@@ -394,6 +394,6 @@ func (e *experiment) removeFault(ctx context.Context) error {
 	if err = e.waitFault(ctx, "AllRecovered", 90*time.Second); err != nil {
 		return err
 	}
-	_, err = kubectl(ctx, nil, "-n", e.cfg.Namespace, "delete", e.faultKind, e.faultName, "--wait=true", "--timeout=60s", "-o", "json")
+	_, err = kubectl(ctx, nil, "-n", e.cfg.Namespace, "delete", e.faultKind, e.faultName, "--wait=true", "--timeout=60s", "-o", "name")
 	return err
 }
