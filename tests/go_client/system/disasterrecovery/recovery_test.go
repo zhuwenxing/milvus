@@ -34,24 +34,27 @@ import (
 )
 
 type experimentConfig struct {
-	Address         string   `json:"address"`
-	Namespace       string   `json:"namespace"`
-	Release         string   `json:"release"`
-	Output          string   `json:"output"`
-	Groups          []string `json:"groups"`
-	Fault           string   `json:"fault"`
-	Scope           string   `json:"scope"`
-	Component       string   `json:"component"`
-	TargetGroup     string   `json:"target_group"`
-	BaselineSeconds int      `json:"baseline_seconds"`
-	FaultSeconds    int      `json:"fault_seconds"`
-	RecoverySeconds int      `json:"recovery_seconds"`
-	StableSeconds   int      `json:"stable_seconds"`
-	RequestTimeout  float64  `json:"request_timeout"`
-	SearchQPS       float64  `json:"search_qps"`
-	QueryQPS        float64  `json:"query_qps"`
-	InsertQPS       float64  `json:"insert_qps"`
-	Workers         int      `json:"workers"`
+	Address             string   `json:"address"`
+	Namespace           string   `json:"namespace"`
+	Release             string   `json:"release"`
+	Output              string   `json:"output"`
+	Groups              []string `json:"groups"`
+	Fault               string   `json:"fault"`
+	Scope               string   `json:"scope"`
+	Component           string   `json:"component"`
+	TargetGroup         string   `json:"target_group"`
+	BaselineSeconds     int      `json:"baseline_seconds"`
+	FaultSeconds        int      `json:"fault_seconds"`
+	RecoverySeconds     int      `json:"recovery_seconds"`
+	StableSeconds       int      `json:"stable_seconds"`
+	RequestTimeout      float64  `json:"request_timeout"`
+	SearchQPS           float64  `json:"search_qps"`
+	QueryQPS            float64  `json:"query_qps"`
+	InsertQPS           float64  `json:"insert_qps"`
+	Workers             int      `json:"workers"`
+	LoadMode            string   `json:"load_mode"`
+	CalibrationSeconds  int      `json:"calibration_seconds"`
+	CalibrationMaxScale float64  `json:"calibration_max_scale"`
 }
 
 type experiment struct {
@@ -99,6 +102,21 @@ func readConfig() (experimentConfig, error) {
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(&cfg); err != nil {
 		return cfg, err
+	}
+	if cfg.LoadMode == "" {
+		cfg.LoadMode = "fixed"
+	}
+	if cfg.CalibrationSeconds == 0 {
+		cfg.CalibrationSeconds = 30
+	}
+	if cfg.CalibrationMaxScale == 0 {
+		cfg.CalibrationMaxScale = 64
+	}
+	if cfg.LoadMode != "fixed" && cfg.LoadMode != "max-stable" {
+		return cfg, fmt.Errorf("load_mode must be fixed or max-stable")
+	}
+	if cfg.CalibrationSeconds < 20 || cfg.CalibrationSeconds > 120 || cfg.CalibrationMaxScale < 2 || cfg.CalibrationMaxScale > 128 {
+		return cfg, fmt.Errorf("invalid bounded calibration settings")
 	}
 	if cfg.Namespace != "chaos-testing" || !regexp.MustCompile(`^ha-[a-z0-9-]{1,40}$`).MatchString(cfg.Release) {
 		return cfg, fmt.Errorf("use an isolated ha-* release in chaos-testing")
@@ -170,14 +188,18 @@ func TestSingleFaultRecovery(t *testing.T) {
 			if err := e.traffic.stop(); err != nil {
 				t.Errorf("traffic cleanup: %v", err)
 			}
-		}
-		if err := client.DropCollection(cleanupCtx, milvusclient.NewDropCollectionOption(e.collection)); err != nil {
-			t.Errorf("collection cleanup: %v", err)
+			if err := client.DropCollection(cleanupCtx, milvusclient.NewDropCollectionOption(e.collection)); err != nil {
+				t.Errorf("collection cleanup: %v", err)
+			}
 		}
 		if err := client.Close(cleanupCtx); err != nil {
 			t.Errorf("client cleanup: %v", err)
 		}
 	})
+	if cfg.LoadMode == "max-stable" {
+		require.NoError(t, e.calibrate(ctx, t.Logf))
+		cfg = e.cfg
+	}
 	e.traffic, err = newTraffic(e)
 	require.NoError(t, err)
 	require.NoError(t, e.traffic.prepare(ctx))

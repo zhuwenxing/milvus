@@ -192,7 +192,7 @@ func (l *traffic) call(op string, sequence int64, scheduled float64) {
 			} else {
 				for i := range 10 {
 					id, idErr := result[0].IDs.GetAsInt64(i)
-					if idErr != nil || id < 0 || id >= 10000 || math.IsNaN(float64(result[0].Scores[i])) {
+					if idErr != nil || id < 0 || id >= 10000 || math.IsNaN(float64(result[0].Scores[i])) || math.IsInf(float64(result[0].Scores[i]), 0) {
 						s.Correct = false
 						err = fmt.Errorf("incorrect search result")
 						break
@@ -316,9 +316,10 @@ func (l *traffic) baselineCheck() error {
 		if !r.Sent {
 			return fmt.Errorf("load generator saturated before fault; increase workers or reduce QPS")
 		}
-		if r.Success {
-			counts[r.Operation]++
+		if !r.Success {
+			return fmt.Errorf("failed baseline %s request: %s", r.Operation, r.Error)
 		}
+		counts[r.Operation]++
 		if !r.Correct {
 			return fmt.Errorf("incorrect baseline response")
 		}
