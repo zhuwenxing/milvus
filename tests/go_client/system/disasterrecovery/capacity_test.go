@@ -52,12 +52,12 @@ type capacityTrial struct {
 	RunnerCPUObservation string                    `json:"runner_cpu_observation"`
 }
 
-// cgroup v2 describes the generator container's CPU use, including its Go runtime.
+// cgroups describe the generator container's CPU use, including its Go runtime.
 // Unsupported hosts retain an explicit observation gap rather than a zero value.
 func runnerCPU() (usage, quota float64, err error) {
 	data, err := os.ReadFile("/sys/fs/cgroup/cpu.stat")
 	if err != nil {
-		return 0, 0, err
+		return runnerCPUv1()
 	}
 	fields := strings.Fields(string(data))
 	found := false
@@ -90,6 +90,29 @@ func runnerCPU() (usage, quota float64, err error) {
 		return 0, 0, fmt.Errorf("invalid cgroup CPU quota")
 	}
 	return usage / 1e6, limit / period, nil
+}
+
+func runnerCPUv1() (usage, quota float64, err error) {
+	read := func(path string) (float64, error) {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return 0, readErr
+		}
+		return strconv.ParseFloat(strings.TrimSpace(string(data)), 64)
+	}
+	usage, err = read("/sys/fs/cgroup/cpuacct/cpuacct.usage")
+	if err != nil {
+		return 0, 0, err
+	}
+	limit, err := read("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+	if err != nil {
+		return 0, 0, err
+	}
+	period, err := read("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+	if err != nil || limit <= 0 || period <= 0 {
+		return 0, 0, fmt.Errorf("bounded cgroup v1 CPU quota unavailable")
+	}
+	return usage / 1e9, limit / period, nil
 }
 
 func workloadRates(cfg experimentConfig) map[string]float64 {
@@ -229,7 +252,7 @@ func (e *experiment) capacityTrial(ctx context.Context, number int, scale float6
 	result.RunnerCPUObservation = "unavailable; server saturation cannot be inferred from this trial"
 	if cpuErr == nil && cpuAfterErr == nil && cpuAfter >= cpuBefore {
 		result.RunnerCPUFraction = new((cpuAfter - cpuBefore) / (end - start) / cpuQuota)
-		result.RunnerCPUObservation = "cgroup v2 averaged generator CPU / quota, not peak CPU"
+		result.RunnerCPUObservation = "cgroup averaged generator CPU / quota, not peak CPU"
 		if *result.RunnerCPUFraction >= .85 {
 			result.Accepted = false
 			result.Reasons = append(result.Reasons, "generator CPU headroom below 15 percent; capacity inconclusive")
